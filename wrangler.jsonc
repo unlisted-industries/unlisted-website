@@ -1,11 +1,19 @@
-// Cloudflare Worker (name must match the Worker created in Cloudflare: unlisted-website) settings. SECRETS are NOT stored here (set in Cloudflare → Settings → Variables and Secrets).
-// The two values below are PUBLIC by design (read-only key; Supabase row-level security protects the data).
 {
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "unlisted-website",
+  "main": "./src/worker.js",
   "compatibility_date": "2026-11-01",
-  "vars": {
-    "SUPABASE_URL": "https://zubyfzcrfxripboefban.supabase.co",
-    "SUPABASE_PUBLISHABLE_KEY": "sb_publishable_gk1jBAR3SaMJvE8Fs-RiQw_5U_CCxQx"
-  }
-  // Step 14 adds: "triggers": { "crons": ["*/10 * * * *"] }  (abandoned-cart reminders, keep-alive, backups)
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "keep_vars": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "unlisted-store",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "unlisted-store-media" }],
+  "triggers": { "crons": ["*/15 * * * *"] }
 }

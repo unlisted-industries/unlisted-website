@@ -1,41 +1,48 @@
-# UNLISTED™ shop
+# UNLISTED™ Cloudflare store
 
-Storefront + admin for unlisted-shop.com. Astro (SSR) on Cloudflare Workers, Supabase (DB/auth), Resend (email), Paymob (cards/wallets).
-Goal: $0/month platform fees. Shopify stays live until the owner approves cutover (Phase 2).
+An Astro storefront and owner dashboard on Cloudflare Workers, D1 and R2. The storefront uses the live UNLISTED theme styles, typography, brand artwork, and public catalog captured on November 9, 2026. The Shopify theme ZIP is still needed for the final comparison against the original Liquid sections and settings.
 
-## Status
-| Step | What | State |
-|---|---|---|
-| 1 | Scaffold, theme CSS/fonts/logos copied from the Shopify theme | done |
-| 3–6 | Home, collections, product (variants, size select, pre-order), cart, size-guide modal, static pages | done (local-tested) |
-| 2 | DB schema + RLS (`supabase/migrations/001_core.sql`) + 7 RLS tests | done, applied to Supabase project `unlisted-shop` (ref zubyfzcrfxripboefban, Frankfurt) |
-| 2b | Catalog loaded into Supabase (`supabase/seed.sql`: 3 collections, 6 products, 12 variants, 27 images) | done; storefront now reads Supabase live (falls back to `seed.json` if unreachable). Not yet verified from a deployed site |
-| 2c | Shipping rates for 27 governorates loaded (80/110/130/150 EGP). 8 are from your past orders (Cairo, Giza, Alexandria, Suez 80; Qalyubia, Menofia 110; Minya 130; Matrouh 150), the other 19 are ESTIMATES by region: confirm or edit |
-| 7+ | Checkout/COD, emails, admin, Paymob, abandoned carts, import | next |
+## Local development
 
-## Run locally
-```
-npm install
-python3 scripts/make_seed.py path/to/products_export.csv   # regenerates src/data/seed.json
-npm run dev        # http://localhost:4321
-npm test           # RLS tests (in-process Postgres, no accounts needed)
+Use Node 24 and curl.
+
+~~~sh
+npm ci
+npm run db:local
+npm run catalog:local
 npm run build
-```
+npx wrangler dev
+npm test
+~~~
 
-## Where things live
-- `public/css/*` – original Shopify theme CSS (fonts/logos re-pointed to `/fonts`, `/img`). Edit here to change the look.
-- `src/layouts/Base.astro` – header, menu, footer, size-guide modal.
-- `src/pages/` – routes. `index`, `collections/[slug]`, `products/[handle]` (pre-order products show the registration form), `cart`, `checkout` (placeholder), `pages/*`, `api/*`.
-- `src/lib/catalog.ts` – product data. Reads `src/data/seed.json` now; switches to Supabase in step 2 wiring.
-- `src/lib/pages.ts` – text of Shipping/About/Contact (moves to the admin page editor later).
-- `public/js/site.js` – cart (localStorage), menu, size guide. `product.js`, `cart-page.js`, `forms.js` – page scripts.
-- `supabase/migrations/` – SQL. `tests/` – tests.
+The catalog importer copies images and both collection films to R2 and adds six public products, twelve variants, collection membership, and policy pages to D1. Re-running it preserves merchant edits. The transfer archive includes the original media in the local import cache for an offline restore. Imported availability reflects the public storefront. Exact inventory starts unverified. The site serves the copied media from R2 and uses D1 for commerce.
 
-## Old links
-`/?collection=hoodies` → `/collections/hoodies`, `/?preorder=<handle>` → `/products/<handle>` (301).
+## Deploy to the existing Worker
 
-## Known gaps / notes
-- Product images and the hero video still load from Shopify's CDN. They move to our own storage before cutover (otherwise they break when Shopify is cancelled).
-- Pre-order = free registration (name, email, WhatsApp, size, consent), same as the live site. Stored in `preorder_requests`.
-- Cart prices are re-checked on the server at checkout (step 7); never trust the browser.
-- Secrets: see `.env.example`. Never commit `.env`.
+1. Authorize GitHub write access for unlisted-industries/unlisted-website and Cloudflare access for the account containing unlisted-website. Provision the D1 database and R2 bucket or confirm the existing resources. Default names are unlisted-store and unlisted-store-media.
+2. Set CLOUDFLARE_D1_DATABASE_ID in the deployment environment. Use CLOUDFLARE_D1_DATABASE_NAME and CLOUDFLARE_R2_BUCKET if the resources use different names. Use Cloudflare CLI sign-in or account-scoped CI secrets.
+3. Run the one-time bootstrap.
+
+~~~sh
+npm ci
+npm run build
+npm run deploy -- --bootstrap-catalog
+~~~
+
+Verify https://unlisted-website.unlisted-yh.workers.dev/api/health and the public store routes. The deploy command targets the existing Worker and declares no custom domain. The repository workflow tests every pull request and can deploy main when the UNLISTED_DEPLOY_ENABLED repository variable is true. Configure CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the cloudflare GitHub environment and set the database ID in its variables. Use one active deployment pipeline for the Worker.
+
+## Merchant setup
+
+- Set ADMIN_EMAILS, EMAIL_FROM, and RESEND_API_KEY in Cloudflare. Use an approved owner email and a verified Resend sender. Sign in at /admin.
+- Confirm stock and delivery rates in the dashboard. Add each approved Egyptian governorate rate and any active discount codes. The public Shopify catalog has no stock counts or merchant shipping rates.
+- Configure the Paymob test secret, public key, integration IDs, HMAC secret, and PAYMENT_ORIGIN. See .env.example. Test a hosted card payment and a signed callback with the staging Worker. Cash on delivery can be enabled independently.
+- Checkout requires both CHECKOUT_ENABLED=true in the Worker and the dashboard checkout switch. Keep the merchant gates closed while the existing store and the replacement share inventory. Perform the final inventory reconciliation at cutover.
+- Order refunds are recorded after the merchant completes them in Paymob or with the courier. Shipping status and tracking references are maintained in the dashboard.
+
+## Shopify data and cutover
+
+The live store data is read-only during migration. For authenticated inventory, provide Shopify access with product and inventory read scopes and run node scripts/shopify-export.mjs inventory. Review the private SQL output under .local/shopify, then apply it to D1. Initial stock import only fills unverified values. Untracked and backorder variants require merchant review.
+
+The history mode exports accessible orders and customer emails with the corresponding protected-data scopes. Import history.sql privately into D1 to populate the Shopify archive in admin. Shopify may require all-orders access for older history. Legacy records do not affect current orders, inventory, or new-store analytics. Customers sign in with new email links.
+
+Verify the theme ZIP, mobile storefront, merchant settings, test checkout and rollback before requesting approval for any domain or subscription change. Keep Shopify credentials and exported customer data out of Git.

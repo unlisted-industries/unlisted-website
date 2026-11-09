@@ -7,15 +7,19 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "seed:json": "python3 scripts/make_seed.py",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "catalog:local": "node scripts/import-catalog.mjs --local",
+    "catalog:remote": "node scripts/import-catalog.mjs --remote",
+    "deploy": "node scripts/deploy.mjs"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^14.4.6",
-    "@supabase/supabase-js": "^2.119.0",
-    "astro": "^7.4.7"
+    "astro": "^7.4.7",
+    "sanitize-html": "2.18.1"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.15"
+    "miniflare": "5.20261104.0-beta",
+    "wrangler": "4.158.0"
   }
 }

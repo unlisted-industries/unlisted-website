@@ -1,0 +1,33 @@
+---
+import { mediaUrl, money } from '../lib/content.js';
+import Notice from './Notice.astro';
+const { product } = Astro.props;
+---
+<section class="drop-detail" id="DropDetail" aria-label="Pre-order product details">
+  <a href="/" class="drop-back">← ALL ITEMS</a>
+  <div class="drop-detail-layout">
+    <div class="drop-gallery" aria-label="Product image gallery">
+      {product.images.map((image, index) => <img src={mediaUrl(image.key)} alt={image.alt} loading={index ? 'lazy' : 'eager'} width="1000" height="1000" />)}
+    </div>
+    <div class="drop-detail-copy">
+      <span class="drop-badge">PRE-ORDER</span>
+      <h1>{product.title}</h1>
+      <div class="drop-detail-price">{money(product.variants[0]?.price, true)}</div>
+      <p>Free registration. No payment is required. We’ll contact you when your item is ready.</p>
+      <Notice success={Astro.url.searchParams.has('registered') ? 'Your pre-order interest is registered.' : null} />
+      <form method="post" action="/api/preorder" id="DropPreorderForm" class="drop-form">
+        <input type="hidden" name="product" value={product.handle} />
+        <label>Full name <input name="name" autocomplete="name" maxlength="100" required /></label>
+        <label>Email address <input type="email" name="email" autocomplete="email" maxlength="254" required /></label>
+        <label>WhatsApp phone number <input type="tel" name="phone" autocomplete="tel" maxlength="24" required /></label>
+        <fieldset><legend>Selected size</legend>
+          {product.variants.map((variant) => <label><input type="radio" name="variant" value={variant.id} required /> {variant.title}</label>)}
+        </fieldset>
+        <p class="drop-size-note">Size chart coming soon. No measurements are available yet.</p>
+        <label class="drop-consent"><input type="checkbox" name="consent" required /> I agree to receive email and WhatsApp updates about this pre-order.</label>
+        <button class="btn" type="submit" disabled={!product.variants.length}>PRE-ORDER — NO PAYMENT REQUIRED</button>
+        <p class="drop-form-note">Registration only. No checkout or payment.</p>
+      </form>
+    </div>
+  </div>
+</section>

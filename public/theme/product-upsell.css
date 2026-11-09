@@ -1,0 +1,29 @@
+.unl-cozy-upsell{margin-top:28px;padding:26px 0 12px;border-top:1px solid #cfd3d9;color:#0b1830;text-align:left}
+    .unl-cozy-upsell-heading{margin:0 0 22px;font:700 20px/1.35 Archivo,Arial,sans-serif;letter-spacing:.025em}
+    .unl-cozy-upsell-content{display:flex;align-items:flex-start;gap:22px}
+    .unl-cozy-upsell-image{flex:0 0 160px;display:block;background:#f4f4f4}
+    .unl-cozy-upsell-image img{display:block;width:160px;height:200px;object-fit:cover}
+    .unl-cozy-upsell-details{min-width:0;flex:1}
+    .unl-cozy-upsell-description{margin:0 0 10px!important;font-size:13px!important;line-height:1.5!important;color:#6b7280}
+    .unl-cozy-upsell-title{display:block;text-decoration:none;font-size:17px;font-weight:700;line-height:1.4;letter-spacing:.01em}
+    .unl-cozy-upsell-price{margin:10px 0 16px!important;font-size:19px!important;line-height:1.4!important;font-weight:600}
+    .unl-cozy-upsell-controls{display:flex;gap:10px;align-items:stretch;flex-wrap:wrap}
+    .unl-cozy-upsell-controls select{height:48px;min-width:88px;border:1px solid #aeb5c1;border-radius:0;background:#fff;color:#0b1830;padding:0 12px;font:16px Archivo,Arial,sans-serif}
+    .unl-cozy-upsell-add{flex:1 1 150px;min-height:48px;padding:12px 16px;border:0;background:#0b1830;color:#fff;font:700 14px/1.35 Archivo,Arial,sans-serif;letter-spacing:.035em;cursor:pointer}
+    .unl-cozy-upsell-add:disabled{opacity:.55;cursor:wait}
+    .unl-cozy-upsell-error{font-size:13px!important;margin:10px 0!important;color:#aa1c1c}
+    @media(max-width:600px){
+      .unl-cozy-upsell-heading{font-size:20px;margin-bottom:18px}
+      .unl-cozy-upsell-content{display:grid;grid-template-columns:120px minmax(0,1fr);column-gap:18px;row-gap:8px}
+      .unl-cozy-upsell-image{grid-column:1;grid-row:1 / span 3;align-self:start}
+      .unl-cozy-upsell-image img{width:120px;height:160px}
+      .unl-cozy-upsell-details{display:contents}
+      .unl-cozy-upsell-description,.unl-cozy-upsell-title,.unl-cozy-upsell-price{grid-column:2}
+      .unl-cozy-upsell-description{margin:0!important}
+      .unl-cozy-upsell-title{font-size:16px}
+      .unl-cozy-upsell-price{font-size:19px!important;margin:0!important;align-self:start}
+      .unl-cozy-upsell-controls{grid-column:1 / -1;margin-top:8px;flex-wrap:nowrap}
+      .unl-cozy-upsell-controls select{flex:0 0 88px;min-width:0}
+      .unl-cozy-upsell-add{flex:1 1 0;min-width:0}
+      .unl-cozy-upsell-error{grid-column:1 / -1}
+    }

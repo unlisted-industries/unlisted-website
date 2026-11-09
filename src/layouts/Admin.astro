@@ -1,0 +1,38 @@
+---
+import { adminSections } from '../lib/admin.js';
+import Notice from '../components/Notice.astro';
+const { title, section, user } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>{title} · UNLISTED Admin</title>
+  <link rel="stylesheet" href="/admin/admin.css" />
+  <script is:inline src="/admin/admin.js" defer></script>
+</head>
+<body class={user ? 'admin-app' : 'admin-signin'}>
+  <header class="admin-header">
+    <a href={user ? '/admin' : '/'} class="admin-brand">UNLISTED<span>™</span> <small>ADMIN</small></a>
+    {user && <div class="admin-header-actions">
+      <a href="/" target="_blank" rel="noopener">View store ↗</a>
+      <form method="post" action="/admin/session"><input type="hidden" name="action" value="logout" /><button class="logout">Sign out</button></form>
+    </div>}
+  </header>
+  {user ? <div class="admin-shell">
+    <aside class="admin-sidebar">
+      <nav aria-label="Store admin">
+        <a href="/admin" aria-current={!section ? 'page' : undefined}>Overview</a>
+        {adminSections.map(([key, label]) => <a href={'/admin/' + key} aria-current={section === key ? 'page' : undefined}>{label}</a>)}
+      </nav>
+      <small class="admin-email">{user.email}</small>
+    </aside>
+    <main class="admin-main">
+      <Notice success={Astro.url.searchParams.has('saved') ? 'Changes saved.' : null} />
+      <slot />
+    </main>
+  </div> : <main class="admin-login"><slot /></main>}
+</body>
+</html>

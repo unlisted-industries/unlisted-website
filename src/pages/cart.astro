@@ -1,0 +1,44 @@
+---
+import { env } from 'cloudflare:workers';
+import Store from '../layouts/Store.astro';
+import Notice from '../components/Notice.astro';
+import { cartId, getCart } from '../lib/cart.js';
+import { mediaUrl, money } from '../lib/content.js';
+const cart = await getCart(env.DB, cartId(Astro));
+---
+<Store title="Your cart" noIndex>
+  <section class="unl-cart">
+    <h1>YOUR CART</h1>
+    <Notice />
+    {!cart.items.length ? <>
+      <p>Your cart is empty.</p>
+      <a class="btn" style="max-width:340px;margin-top:24px" href="/">SHOP THE COZY DROP</a>
+    </> : <>
+      {cart.items.map((item) => <article class="unl-cart-item">
+        <a class="unl-cart-image" href={'/products/' + item.handle}>
+          {item.image && <img src={mediaUrl(item.image)} alt={item.title} width="120" height="150" />}
+        </a>
+        <div class="unl-cart-details">
+          <a href={'/products/' + item.handle}>{item.title}</a>
+          <p>{item.variant_title} · {money(item.price)}</p>
+          {!item.available && <p role="status">This size or quantity is currently unavailable.</p>}
+          <form method="post" action="/api/cart" class="store-quantity">
+            <input type="hidden" name="variant" value={item.id} />
+            <div class="unl-quantity">
+              <button class="unl-quantity-button" name="quantity" value={item.quantity - 1} aria-label="Decrease quantity">−</button>
+              <span class="unl-quantity-value" aria-label={'Quantity ' + item.quantity}>{item.quantity}</span>
+              <button class="unl-quantity-button" name="quantity" value={item.quantity + 1} aria-label="Increase quantity" disabled={item.quantity >= 25 || !item.available}>+</button>
+            </div>
+            <input type="hidden" name="action" value="update" />
+            <button class="unl-cart-remove" name="quantity" value="0">REMOVE</button>
+          </form>
+        </div>
+        <strong>{money(item.price * item.quantity)}</strong>
+      </article>)}
+      <p class="unl-cart-total"><span>SUBTOTAL</span><strong>{money(cart.subtotal)}</strong></p>
+      <p class="unl-cart-note">Shipping calculated at checkout.</p>
+      <div class="unl-cart-actions"><a class="btn unl-cart-update" href="/">CONTINUE SHOPPING</a><a class="btn" href="/checkout">CHECKOUT</a></div>
+    </>}
+    <p class="store-account-link"><a href="/account">My account</a></p>
+  </section>
+</Store>

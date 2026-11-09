@@ -1,0 +1,15 @@
+---
+import Notice from './Notice.astro';
+const { purpose, ready, confirm = false } = Astro.props;
+const path = purpose === 'admin' ? '/admin' : '/account';
+---
+<Notice success={Astro.url.searchParams.has('sent') ? 'If the address is eligible, a sign-in link will arrive shortly.' : null} />
+{confirm ? <form method="post" action={path + '/session'} class="form">
+  <input type="hidden" name="action" value="confirm" />
+  <input type="hidden" name="token" value={Astro.url.searchParams.get('token')?.slice(0, 64)} />
+  <button class="btn" type="submit">SIGN IN</button>
+</form> : ready ? <form method="post" action={path + '/session'} class="form">
+  <input type="hidden" name="action" value="request" />
+  <label>Email address <input name="email" type="email" autocomplete="email" maxlength="254" required /></label>
+  <button class="btn" type="submit">EMAIL ME A SIGN-IN LINK</button>
+</form> : <p>Email sign-in is currently unavailable.</p>}

@@ -1,0 +1,20 @@
+---
+import Fields from './Fields.astro';
+import { cairoDateTime } from '../../lib/content.js';
+const { discount } = Astro.props;
+const amount = discount?.kind === 'fixed' ? (discount.value / 100).toFixed(2) : discount?.value;
+---
+<form method="post" action="/admin/action" class="admin-form">
+  <Fields op="discount" area="discounts" />
+  <div class="form-grid">
+    <label>Code<input name="code" value={discount?.code} readonly={Boolean(discount)} required maxlength="32" /></label>
+    <label>Type<select name="kind"><option value="percent" selected={discount?.kind !== 'fixed'}>Percentage</option><option value="fixed" selected={discount?.kind === 'fixed'}>Fixed amount (EGP)</option></select></label>
+    <label>Discount value<input name="value" value={amount} inputmode="decimal" required /></label>
+    <label>Minimum cart (EGP)<input name="min_subtotal" value={((discount?.min_subtotal ?? 0) / 100).toFixed(2)} inputmode="decimal" /></label>
+    <label>Usage limit<input type="number" name="max_uses" min="1" value={discount?.max_uses} placeholder="Unlimited" /></label>
+    <label>Starts (Cairo time)<input type="datetime-local" name="starts_at" value={cairoDateTime(discount?.starts_at)} /></label>
+    <label>Ends (Cairo time)<input type="datetime-local" name="ends_at" value={cairoDateTime(discount?.ends_at)} /></label>
+    <label class="check"><input type="checkbox" name="active" checked={!discount || discount.active} /> Active</label>
+  </div>
+  <button class="button primary">{discount ? 'Save discount' : 'Create discount'}</button>
+</form>

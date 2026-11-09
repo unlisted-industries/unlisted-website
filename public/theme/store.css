@@ -1,0 +1,23 @@
+body.store-menu-open { overflow: hidden; }
+.drop-film { background-position: center; background-size: cover; }
+.store-notice { padding: 12px 14px; border: 1px solid #ccd1da; line-height: 1.5; }
+.store-error { color: #8b1730; border-color: #da8799; }
+.store-account-link { margin-top: 24px; text-decoration: underline; }
+.store-quantity .unl-cart-remove { display: block !important; background: transparent; padding: 0; color: var(--navy); }
+.store-checkout { max-width: 880px; margin: 0 auto; padding: 42px 20px 84px; }
+.store-checkout h1 { margin: 0 0 22px; }
+.store-checkout .btn { margin-top: 16px; }
+.store-checkout .form { display: grid; gap: 12px; }
+.store-checkout .form label { display: grid; gap: 6px; }
+.store-checkout .form select { width: 100%; min-height: 44px; padding: 8px; background: #fff; border: 1px solid #bbc0c9; }
+.store-checkout fieldset { border: 1px solid #bbc0c9; padding: 12px; }
+.store-checkout fieldset label { display: inline-flex; align-items: center; gap: 8px; margin: 6px 12px 6px 0; }
+.store-checkout fieldset input { width: auto; min-height: 0; }
+.store-totals { padding: 0; margin: 22px 0; }
+.store-totals div { display: flex; gap: 12px; justify-content: space-between; border-bottom: 1px solid #e0e3e9; padding: 9px 0; }
+.store-totals dd { margin: 0; }
+.store-checkout .account-orders { list-style: none; padding: 0; }
+.account-orders li { padding: 12px 0; border-bottom: 1px solid #e0e3e9; }
+@media (prefers-reduced-motion: reduce) {
+  .overlay, .overlay .menu { transition: none; }
+}

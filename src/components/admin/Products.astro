@@ -1,0 +1,115 @@
+---
+import { env } from 'cloudflare:workers';
+import { all } from '../../lib/db.js';
+import { queryOffset } from '../../lib/admin.js';
+import { getProduct } from '../../lib/catalog.js';
+import { mediaUrl } from '../../lib/content.js';
+import Fields from './Fields.astro';
+import RichText from './RichText.astro';
+import Variant from './Variant.astro';
+import Pagination from './Pagination.astro';
+const { section } = Astro.props;
+const isProduct = section === 'products';
+const handle = Astro.url.searchParams.get(isProduct ? 'product' : 'collection');
+const creating = Astro.url.searchParams.has('new');
+const offset = queryOffset(Astro.url);
+const q = (Astro.url.searchParams.get('q') ?? '').slice(0, 100);
+const editing = Boolean(handle || creating);
+const [record, list, media, members, allProducts] = await Promise.all([
+  handle ? isProduct ? getProduct(env.DB, handle, true)
+    : env.DB.prepare('SELECT * FROM collections WHERE handle = ?').bind(handle).first() : null,
+  editing ? [] : isProduct
+    ? all(env.DB.prepare(`SELECT p.handle, p.title, p.status, p.preorder,
+      (SELECT count(*) FROM variants WHERE product_id = p.id AND active = 1) AS variants,
+      (SELECT coalesce(sum(inventory), 0) FROM variants WHERE product_id = p.id AND active = 1) AS stock,
+      (SELECT count(*) FROM variants WHERE product_id = p.id AND active = 1 AND inventory IS NULL) AS unknown
+      FROM products p WHERE instr(lower(title), lower(?)) > 0 OR ? = '' ORDER BY position, handle LIMIT 26 OFFSET ?`).bind(q, q, offset))
+    : all(env.DB.prepare(`SELECT c.*,
+      (SELECT count(*) FROM collection_products WHERE collection_handle = c.handle) AS products
+      FROM collections c WHERE instr(lower(title), lower(?)) > 0 OR ? = '' ORDER BY title LIMIT 26 OFFSET ?`).bind(q, q, offset)),
+  isProduct && handle ? all(env.DB.prepare("SELECT key, original_name FROM media WHERE content_type LIKE 'image/%' ORDER BY original_name LIMIT 500")) : [],
+  !isProduct && handle ? all(env.DB.prepare('SELECT product_id FROM collection_products WHERE collection_handle = ?').bind(handle)) : [],
+  !isProduct && editing ? all(env.DB.prepare('SELECT id, title, status FROM products ORDER BY title LIMIT 500')) : [],
+]);
+const selected = new Set(members.map((row) => row.product_id));
+const base = '/admin/' + section;
+const label = isProduct ? 'Product' : 'Collection';
+---
+<div class="admin-heading">
+  <div>
+    <p class="overline">CATALOG</p>
+    <h1>{record?.title ?? (creating ? 'Add ' + label.toLowerCase() : isProduct ? 'Products' : 'Collections')}</h1>
+    {editing && <a class="quiet-link" href={base}>← Back to {section}</a>}
+  </div>
+  {!editing && <a class="button primary" href={base + '?new=1'}>Add {label.toLowerCase()}</a>}
+</div>
+{!editing ? <section class="panel">
+  <form method="get" class="inline-form"><label>Search <input name="q" value={q} placeholder={label + ' name'} /></label><button class="button">Search</button></form>
+  <div class="table-wrap"><table>
+    <thead><tr><th>{label}</th><th>Status</th>{isProduct ? <><th>Variants</th><th>Stock</th></> : <th>Products</th>}</tr></thead>
+    <tbody>{list.slice(0, 25).map((row) => <tr>
+      <td><a href={base + '?' + (isProduct ? 'product=' : 'collection=') + row.handle}>{row.title}</a></td>
+      <td><span class="pill">{isProduct ? row.status : row.active ? 'active' : 'hidden'}</span> {row.preorder ? 'Pre-order' : ''}</td>
+      {isProduct ? <><td>{row.variants}</td><td>{row.unknown ? row.stock + ' confirmed · ' + row.unknown + ' unverified' : row.stock}</td></> : <td>{row.products}</td>}
+    </tr>)}</tbody>
+  </table></div>
+  {!list.length && <p class="muted">No {section} found.</p>}
+  <Pagination offset={offset} more={list.length > 25} />
+</section> : handle && !record ? <p>{label} was not found.</p> : <>
+  <section class="panel">
+    <h2>{label} details</h2>
+    <form method="post" action="/admin/action" class="admin-form">
+      <Fields op={isProduct ? 'product' : 'collection'} area={section} query={handle ? (isProduct ? 'product=' : 'collection=') + handle : 'new=1'} />
+      <input type="hidden" name="mode" value={creating ? 'new' : 'edit'} />
+      <div class="form-grid">
+        <label>Title<input name="title" required maxlength="150" value={record?.title} /></label>
+        <label>URL handle<input name="handle" required maxlength="80" value={record?.handle} readonly={Boolean(record)} placeholder="lowercase-with-hyphens" /></label>
+        {isProduct && <>
+          <label>Category<input name="category" value={record?.category} placeholder="hoodies" /></label>
+          <label>Display order<input name="position" type="number" min="0" value={record?.position ?? 0} /></label>
+          <label>Options<input name="option_names" value={record?.option_names.join(', ')} placeholder="Size, Color" /></label>
+          <label>Status<select name="status">{['draft', 'active', 'archived'].map((status) => <option selected={record?.status === status}>{status}</option>)}</select></label>
+          <label class="check"><input type="checkbox" name="featured" checked={Boolean(record?.featured)} /> Feature on home</label>
+          <label class="check"><input type="checkbox" name="preorder" checked={Boolean(record?.preorder)} /> Free pre-order registration</label>
+        </>}
+      </div>
+      <RichText label="Description" name="description" value={record?.description} />
+      {!isProduct && <>
+        <label class="check"><input type="checkbox" name="active" checked={!record || record.active} /> Visible on the storefront</label>
+        <fieldset><legend>Products in this collection</legend>
+          <div class="check-grid">{allProducts.map((product) => <label class="check"><input type="checkbox" name="product_id" value={product.id} checked={selected.has(product.id)} /> {product.title}</label>)}</div>
+        </fieldset>
+      </>}
+      <button class="button primary">{creating ? 'Create ' + label.toLowerCase() : 'Save changes'}</button>
+    </form>
+  </section>
+  {isProduct && record && <>
+    <section class="panel"><h2>Variants and inventory</h2><p class="muted">Enter verified stock on hand for each size. Checkout reserves inventory automatically.</p>
+      {record.variants.map((variant) => <details class="admin-detail"><summary>{variant.title} · {variant.inventory ?? 'Stock unverified'}</summary><Variant handle={handle} variant={variant} /></details>)}
+      <details class="admin-detail"><summary>Add a variant</summary><Variant handle={handle} /></details>
+    </section>
+    <section class="panel"><h2>Product media</h2>
+      <div class="media-grid">
+        {record.images.map((image) => <article>
+          <img src={mediaUrl(image.key)} alt={image.alt} loading="lazy" />
+          <form method="post" action="/admin/action">
+            <Fields op="media" area="products" query={'product=' + handle} />
+            <input type="hidden" name="product" value={handle} />
+            <button class="button" name="remove" value={image.key}>Unlink image</button>
+          </form>
+        </article>)}
+      </div>
+      <form method="post" action="/admin/action" class="admin-form" enctype="multipart/form-data">
+        <Fields op="media" area="products" query={'product=' + handle} />
+        <input type="hidden" name="product" value={handle} />
+        <div class="form-grid">
+          <label>Upload an image<input type="file" name="file" accept="image/png,image/webp,image/jpeg" /></label>
+          <label>Or select existing media<select name="media_key"><option value="">Choose an image</option>{media.map((item) => <option value={item.key}>{item.original_name}</option>)}</select></label>
+          <label>Alt text<input name="alt" maxlength="250" /></label>
+          <label>Display order<input name="position" type="number" min="0" value={record.images.length} /></label>
+        </div>
+        <button class="button primary">Save image</button>
+      </form>
+    </section>
+  </>}
+</>}

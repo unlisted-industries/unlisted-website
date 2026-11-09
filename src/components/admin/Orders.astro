@@ -1,0 +1,135 @@
+---
+import { env } from 'cloudflare:workers';
+import { all, isToken } from '../../lib/db.js';
+import { queryOffset } from '../../lib/admin.js';
+import { orderLines } from '../../lib/checkout.js';
+import { displayDate, money } from '../../lib/content.js';
+import Fields from './Fields.astro';
+import Pagination from './Pagination.astro';
+import ShopifyHistory from './ShopifyHistory.astro';
+const { section } = Astro.props;
+const offset = queryOffset(Astro.url);
+const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 140);
+const id = Astro.url.searchParams.get('order');
+const order = section === 'orders' && isToken(id, 16) ? await env.DB.prepare('SELECT * FROM orders WHERE id = ?').bind(id).first() : null;
+const customerEmail = section === 'customers' ? Astro.url.searchParams.get('customer')?.slice(0, 254) : null;
+const inbox = Astro.url.searchParams.get('kind') === 'preorders' ? 'preorders' : 'messages';
+const queries = {
+  orders: () => all(env.DB.prepare(`SELECT id, email, name, status, payment_status, payment_method, total, created_at
+    FROM orders WHERE ? = '' OR instr(lower(email), lower(?)) > 0 OR instr(id, lower(?)) > 0
+    ORDER BY created_at DESC LIMIT 26 OFFSET ?`).bind(q, q, q, offset)),
+  customers: () => all(env.DB.prepare(`WITH addresses AS (
+      SELECT email, name, 0 AS orders FROM customers
+      UNION ALL SELECT email, max(name), count(*) FROM orders GROUP BY email COLLATE NOCASE
+    ) SELECT email, max(name) AS name, sum(orders) AS orders FROM addresses
+      WHERE ? = '' OR instr(lower(email), lower(?)) > 0 OR instr(lower(name), lower(?)) > 0
+      GROUP BY email COLLATE NOCASE ORDER BY email LIMIT 26 OFFSET ?`).bind(q, q, q, offset)),
+  inbox: () => inbox === 'preorders'
+    ? all(env.DB.prepare(`SELECT r.*, p.title AS product, v.title AS variant FROM preorder_requests r
+      JOIN products p ON p.id = r.product_id JOIN variants v ON v.id = r.variant_id
+      ORDER BY r.consent_at DESC LIMIT 26 OFFSET ?`).bind(offset))
+    : all(env.DB.prepare('SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 26 OFFSET ?').bind(offset)),
+};
+const archive = section === 'orders' && Astro.url.searchParams.get('source') === 'shopify';
+const list = order || customerEmail || archive ? [] : await queries[section]();
+const lines = order ? await orderLines(env.DB, order.id) : [];
+const payments = order ? await all(env.DB.prepare('SELECT * FROM payment_events WHERE order_id = ? ORDER BY created_at').bind(order.id)) : [];
+const customerOrders = customerEmail ? await all(env.DB.prepare('SELECT * FROM orders WHERE email = ? COLLATE NOCASE ORDER BY created_at DESC LIMIT 26 OFFSET ?').bind(customerEmail, offset)) : [];
+const base = '/admin/' + section;
+const label = { orders: 'Orders', customers: 'Customers', inbox: 'Inbox' }[section];
+const actions = order ? [
+  ['confirm', 'Confirm order', order.status === 'new' && (order.payment_method === 'cod' || order.payment_status === 'paid')],
+  ['ship', 'Mark shipped', order.status === 'confirmed'],
+  ['deliver', 'Mark delivered', order.status === 'shipped'],
+  ['collect', 'Record COD payment', order.payment_method === 'cod' && order.payment_status === 'unpaid' && !['new', 'cancelled'].includes(order.status)],
+  ['cancel', 'Cancel and restock', ['new', 'confirmed'].includes(order.status) && ['unpaid', 'pending', 'refunded'].includes(order.payment_status)],
+  ['refund', 'Record verified refund', ['paid', 'review'].includes(order.payment_status)],
+].filter(([, , show]) => show) : [];
+---
+<div class="admin-heading">
+  <div><p class="overline">STORE OPERATIONS</p>
+    <h1>{order ? 'Order ' + order.id.slice(0, 8).toUpperCase() : customerEmail ?? label}</h1>
+    {(id || customerEmail) && <a class="quiet-link" href={base}>← Back to {section}</a>}
+  </div>
+</div>
+{archive ? <ShopifyHistory /> : id && !order ? <p>Order was not found.</p> : order ? <>
+  <div class="admin-two">
+    <section class="panel">
+      <h2>Items</h2>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Product</th><th>Qty</th><th>Amount</th></tr></thead>
+        <tbody>{lines.map((line) => <tr><td>{line.product_title}<br /><small>{line.variant_title}{line.sku ? ' · ' + line.sku : ''}</small></td>
+          <td>{line.quantity}</td><td>{money(line.quantity * line.price, true)}</td></tr>)}</tbody>
+      </table></div>
+      <dl class="admin-kv">
+        <div><dt>Subtotal</dt><dd>{money(order.subtotal, true)}</dd></div>
+        <div><dt>Shipping</dt><dd>{money(order.shipping, true)}</dd></div>
+        <div><dt>Discount{order.discount_code ? ' · ' + order.discount_code : ''}</dt><dd>{money(order.discount, true)}</dd></div>
+        <div><dt>Total</dt><dd><strong>{money(order.total, true)}</strong></dd></div>
+      </dl>
+    </section>
+    <section class="panel">
+      <h2>Customer and delivery</h2>
+      <dl class="admin-kv">
+        <div><dt>Placed</dt><dd>{displayDate(order.created_at)}</dd></div>
+        <div><dt>Status</dt><dd><span class="pill">{order.status}</span></dd></div>
+        <div><dt>Payment</dt><dd>{order.payment_method.toUpperCase()} · {order.payment_status}</dd></div>
+        <div><dt>Name</dt><dd>{order.name}</dd></div>
+        <div><dt>Email</dt><dd><a href={'/admin/customers?customer=' + encodeURIComponent(order.email)}>{order.email}</a></dd></div>
+        <div><dt>Phone</dt><dd>{order.phone}</dd></div>
+        <div><dt>Delivery address</dt><dd>{order.address}, {order.city}, {order.shipping_label}</dd></div>
+        {order.tracking && <div><dt>Tracking</dt><dd>{order.tracking}</dd></div>}
+        {order.payment_note && <div><dt>Refund reference</dt><dd>{order.payment_note}</dd></div>}
+      </dl>
+    </section>
+  </div>
+  {actions.length > 0 && <section class="panel"><h2>Order actions</h2>
+    <div class="action-grid">{actions.map(([action, name]) => <form method="post" action="/admin/action" class="admin-form">
+      <Fields op="order" area="orders" query={'order=' + order.id} />
+      <input type="hidden" name="id" value={order.id} /><input type="hidden" name="operation" value={action} />
+      {action === 'ship' && <label>Tracking reference<input name="tracking" maxlength="180" /></label>}
+      {action === 'refund' && <><p class="muted">Record a refund already completed with the payment provider or courier.</p><label>Refund reference<input name="payment_note" maxlength="180" required /></label></>}
+      <button class={action === 'cancel' ? 'button danger' : 'button'}>{name}</button>
+    </form>)}</div>
+  </section>}
+  {payments.length > 0 && <section class="panel"><h2>Paymob activity</h2>
+    <ul>{payments.map((item) => <li>{item.provider_txn} · {item.state === 'late' ? 'Late or duplicate capture. Review in Paymob.' : 'Verified capture'} · {displayDate(item.created_at)}</li>)}</ul>
+  </section>}
+</> : section === 'inbox' ? <section class="panel">
+  <div class="tabs"><a href="/admin/inbox" aria-current={inbox === 'messages' ? 'page' : undefined}>Contact messages</a>
+    <a href="/admin/inbox?kind=preorders" aria-current={inbox === 'preorders' ? 'page' : undefined}>Pre-orders</a></div>
+  {inbox === 'preorders' ? <div class="table-wrap"><table>
+    <thead><tr><th>Customer</th><th>Product and size</th><th>WhatsApp</th><th>Consent</th></tr></thead>
+    <tbody>{list.slice(0, 25).map((row) => <tr><td>{row.name}<br /><small>{row.email}</small></td><td>{row.product} · {row.variant}</td><td>{row.phone}</td><td>{displayDate(row.consent_at)}</td></tr>)}</tbody>
+  </table></div> : <div class="message-list">{list.slice(0, 25).map((row) => <details class="admin-detail">
+    <summary>{row.name} · {displayDate(row.created_at)} {row.read_at ? '' : '· New'}</summary>
+    <p>{row.email} {row.phone ? '· ' + row.phone : ''}</p><p class="preserve">{row.message}</p>
+    {!row.read_at && <form method="post" action="/admin/action"><Fields op="inbox" area="inbox" />
+      <input type="hidden" name="id" value={row.id} /><button class="button">Mark read</button>
+    </form>}
+  </details>)}</div>}
+  {!list.length && <p class="muted">No {inbox === 'preorders' ? 'pre-orders' : 'messages'} yet.</p>}
+  <Pagination offset={offset} more={list.length > 25} />
+</section> : <section class="panel">
+  {section === 'orders' && <div class="tabs"><a href="/admin/orders" aria-current="page">Store orders</a><a href="/admin/orders?source=shopify">Shopify archive</a></div>}
+  {!customerEmail && <form method="get" class="inline-form">
+    <label>Search <input name="q" value={q} placeholder={section === 'orders' ? 'Email or order reference' : 'Name or email'} /></label>
+    <button class="button">Search</button>
+  </form>}
+  {section === 'orders' || customerEmail ? <div class="table-wrap"><table>
+    <thead><tr><th>Order</th><th>Customer</th><th>Order status</th><th>Payment</th><th>Total</th></tr></thead>
+    <tbody>{(customerEmail ? customerOrders : list).slice(0, 25).map((row) => <tr>
+      <td><a href={'/admin/orders?order=' + row.id}>#{row.id.slice(0, 8).toUpperCase()}</a><br /><small>{displayDate(row.created_at)}</small></td>
+      <td>{row.name}<br /><small>{row.email}</small></td><td><span class="pill">{row.status}</span></td>
+      <td>{row.payment_method.toUpperCase()} · {row.payment_status}</td><td>{money(row.total, true)}</td>
+    </tr>)}</tbody>
+  </table></div> : <div class="table-wrap"><table>
+    <thead><tr><th>Customer</th><th>Email</th><th>Orders</th></tr></thead>
+    <tbody>{list.slice(0, 25).map((row) => <tr>
+      <td><a href={'/admin/customers?customer=' + encodeURIComponent(row.email)}>{row.name || row.email}</a></td>
+      <td>{row.email}</td><td>{row.orders}</td>
+    </tr>)}</tbody>
+  </table></div>}
+  {!(customerEmail ? customerOrders : list).length && <p class="muted">No records found.</p>}
+  <Pagination offset={offset} more={(customerEmail ? customerOrders : list).length > 25} />
+</section>}

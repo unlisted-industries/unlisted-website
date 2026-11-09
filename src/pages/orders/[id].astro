@@ -1,0 +1,36 @@
+---
+import { env } from 'cloudflare:workers';
+import Store from '../../layouts/Store.astro';
+import Notice from '../../components/Notice.astro';
+import { orderLines, visibleOrder } from '../../lib/checkout.js';
+import { displayDate, money } from '../../lib/content.js';
+const order = await visibleOrder(env, Astro, Astro.params.id);
+const lines = order ? await orderLines(env.DB, order.id) : [];
+if (!order) Astro.response.status = 404;
+---
+<Store title="Order status" noIndex>
+  <section class="store-checkout">
+    <h1>{order ? 'ORDER ' + order.id.slice(0, 8).toUpperCase() : 'ORDER NOT FOUND'}</h1>
+    <Notice />
+    {order ? <>
+      <p>{displayDate(order.created_at)} · {order.status}</p>
+      {order.payment_status === 'pending' && <p>Payment confirmation is pending. This page updates when Paymob verifies the transaction.</p>}
+      {order.payment_status === 'review' && <p>Payment is under review. <a href="/pages/contact">Contact us</a> for help.</p>}
+      {order.payment_status === 'paid' && <p>Payment received.</p>}
+      {order.payment_status === 'unpaid' && order.payment_method === 'cod' && order.status !== 'cancelled' && <p>Payment is due on delivery.</p>}
+      {order.tracking && <p>Tracking reference {order.tracking}</p>}
+      <ul class="account-orders">{lines.map((line) => <li>{line.quantity} × {line.product_title} · {line.variant_title} · {money(line.price * line.quantity)}</li>)}</ul>
+      <dl class="store-totals">
+        <div><dt>Subtotal</dt><dd>{money(order.subtotal)}</dd></div>
+        <div><dt>Delivery</dt><dd>{money(order.shipping)}</dd></div>
+        {order.discount > 0 && <div><dt>Discount</dt><dd>−{money(order.discount)}</dd></div>}
+        <div><dt><strong>Total</strong></dt><dd><strong>{money(order.total)}</strong></dd></div>
+      </dl>
+      {order.payment_status === 'pending' && order.expires_at > Math.floor(Date.now() / 1000) && <form method="post" action="/api/continue-payment">
+        <input type="hidden" name="order" value={order.id} />
+        <button class="btn" type="submit">CONTINUE TO PAYMENT</button>
+      </form>}
+      <p><a href="/account">My account</a> · <a href="/">Continue shopping</a></p>
+    </> : <p><a href="/account">Sign in</a> with the email used at checkout to see your orders.</p>}
+  </section>
+</Store>

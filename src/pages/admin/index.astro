@@ -1,0 +1,56 @@
+---
+import { env } from 'cloudflare:workers';
+import Admin from '../../layouts/Admin.astro';
+import { currentUser, emailReady } from '../../lib/auth.js';
+import { dashboard } from '../../lib/admin.js';
+import { getSettings } from '../../lib/catalog.js';
+import { checkoutReady } from '../../lib/checkout.js';
+import { cardReady } from '../../lib/paymob.js';
+import { money } from '../../lib/content.js';
+
+const user = await currentUser(env, Astro, 'admin');
+if (!user) return Astro.redirect('/admin/login', 303);
+const requested = Number(Astro.url.searchParams.get('days'));
+const days = [7, 30, 90].includes(requested) ? requested : 30;
+const [metrics, settings] = await Promise.all([dashboard(env.DB, days), getSettings(Astro, env.DB)]);
+const conversion = metrics.visitors ? (100 * metrics.converted / metrics.visitors).toFixed(1) + '%' : '—';
+const cards = [
+  ['Sales', metrics.sales, 'Accepted orders'],
+  ['Paid revenue', money(metrics.revenue, true), 'Collected, excluding recorded refunds'],
+  ['Visitors', metrics.visitors, 'Unique browser visits'],
+  ['Conversion', conversion, 'Visitors who placed an accepted order'],
+];
+---
+<Admin title="Overview" user={user}>
+  <div class="admin-heading">
+    <div><p class="overline">UNLISTED™ STORE</p><h1>Overview</h1><p>Orders, visitors and revenue recorded by your store.</p></div>
+    <form method="get" class="inline-form">
+      <label>Reporting period <select name="days">{[7, 30, 90].map((period) => <option selected={days === period} value={period}>Last {period} days</option>)}</select></label>
+      <button class="button">Apply</button>
+    </form>
+  </div>
+  <div class="metric-grid">
+    {cards.map(([label, value, foot]) => <article class="panel metric"><span>{label}</span><strong>{value}</strong><small>{foot}</small></article>)}
+  </div>
+  <div class="admin-two">
+    <section class="panel">
+      <h2>Bestselling products</h2>
+      {metrics.products.length ? <div class="table-wrap"><table>
+        <thead><tr><th>Product</th><th>Units ordered</th><th>Item value</th></tr></thead>
+        <tbody>{metrics.products.map((row) => <tr><td>{row.title}</td><td>{row.units}</td><td>{money(row.gross, true)}</td></tr>)}</tbody>
+      </table></div> : <p class="muted">Accepted orders will appear here.</p>}
+      <p class="muted">Gross order value {money(metrics.gross, true)}</p>
+    </section>
+    <section class="panel">
+      <h2>Store status</h2>
+      <dl class="admin-kv">
+        <div><dt>Checkout</dt><dd><span class="pill">{checkoutReady(env, settings) ? 'Open' : 'Closed'}</span></dd></div>
+        <div><dt>New orders</dt><dd><a href="/admin/orders">{metrics.newOrders}</a></dd></div>
+        <div><dt>Variants awaiting stock count</dt><dd><a href="/admin/products">{metrics.unknownStock}</a></dd></div>
+        <div><dt>Late or duplicate captures</dt><dd><a href="/admin/orders">{metrics.latePayments}</a></dd></div>
+        <div><dt>Paymob credentials</dt><dd>{cardReady(env) ? 'Configured' : 'Pending'}</dd></div>
+        <div><dt>Email delivery</dt><dd>{emailReady(env) ? 'Configured' : 'Pending'}</dd></div>
+      </dl>
+    </section>
+  </div>
+</Admin>

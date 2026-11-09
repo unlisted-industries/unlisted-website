@@ -1,0 +1,22 @@
+---
+import Fields from './Fields.astro';
+const { handle, variant } = Astro.props;
+const showPrice = (value) => value == null ? '' : (value / 100).toFixed(2);
+---
+<form method="post" action="/admin/action" class="variant-form">
+  <Fields op="variant" area="products" query={'product=' + handle} />
+  <input type="hidden" name="handle" value={handle} />
+  <input type="hidden" name="variant" value={variant?.id ?? ''} />
+  <input type="hidden" name="inventory_before" value={variant?.inventory ?? ''} />
+  <div class="form-grid">
+    <label>Variant title<input name="variant_title" value={variant?.title} required placeholder="S/M or Blue / M" maxlength="120" /></label>
+    <label>SKU<input name="sku" value={variant?.sku} maxlength="100" /></label>
+    <label>Option values<input name="options" value={variant?.options.join(', ')} placeholder="Size, color" maxlength="180" /></label>
+    <label>Display order<input name="position" type="number" min="0" value={variant?.position ?? 0} /></label>
+    <label>Price (EGP)<input name="price" inputmode="decimal" value={showPrice(variant?.price)} required /></label>
+    <label>Compare-at price (EGP)<input name="compare_at" inputmode="decimal" value={showPrice(variant?.compare_at)} /></label>
+    <label>Stock on hand<input name="inventory" type="number" min="0" value={variant?.inventory ?? ''} placeholder="Unverified" /></label>
+    <label class="check"><input type="checkbox" name="active" checked={!variant || variant.active} /> Available for sale</label>
+  </div>
+  <button class="button primary">{variant ? 'Save variant' : 'Add variant'}</button>
+</form>

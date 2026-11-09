@@ -1,0 +1,6 @@
+---
+const { success } = Astro.props;
+const error = Astro.url.searchParams.get('error')?.slice(0, 350);
+---
+{error && <p class="store-notice store-error" role="alert">{error}</p>}
+{success && <p class="store-notice" role="status">{success}</p>}

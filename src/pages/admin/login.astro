@@ -1,0 +1,15 @@
+---
+import { env } from 'cloudflare:workers';
+import Admin from '../../layouts/Admin.astro';
+import SignIn from '../../components/SignIn.astro';
+import { currentUser, emailReady } from '../../lib/auth.js';
+if (await currentUser(env, Astro, 'admin')) return Astro.redirect('/admin', 303);
+---
+<Admin title="Owner sign-in">
+  <div class="panel">
+    <p class="overline">STORE MANAGEMENT</p>
+    <h1>Owner sign-in</h1>
+    <p>Use your approved store email address.</p>
+    <SignIn purpose="admin" ready={emailReady(env) && Boolean(env.ADMIN_EMAILS)} />
+  </div>
+</Admin>

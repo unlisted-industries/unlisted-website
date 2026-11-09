@@ -1,0 +1,31 @@
+---
+import { env } from 'cloudflare:workers';
+import Store from '../layouts/Store.astro';
+import ProductCard from '../components/ProductCard.astro';
+import Preorder from '../components/Preorder.astro';
+import { getSettings, featuredProducts, getProduct, getCollection, available } from '../lib/catalog.js';
+import { mediaUrl } from '../lib/content.js';
+const slug = Astro.url.searchParams.get('preorder');
+const preorder = slug ? await getProduct(env.DB, slug) : null;
+if (preorder && !preorder.preorder) return Astro.redirect('/products/' + preorder.handle, 301);
+const group = Astro.url.searchParams.get('collection');
+const store = await getSettings(Astro, env.DB);
+const collection = group ? await getCollection(env.DB, group) : null;
+const products = preorder ? [] : collection?.products ?? await featuredProducts(env.DB);
+const soldOut = group === 't-shirts' && !products.some((product) => product.variants.some(available));
+---
+<Store title={preorder?.title}>
+  {preorder ? <Preorder product={preorder} /> : <>
+    {store.hero_mobile && <section class="drop-film" aria-label="UNLISTED collection film">
+      <video autoplay muted loop playsinline preload="metadata" poster={mediaUrl(store.hero_poster)} aria-label="UNLISTED cozy grey collection film">
+        {store.hero_desktop && <source media="(min-width: 741px)" src={mediaUrl(store.hero_desktop)} type="video/mp4" />}
+        <source src={mediaUrl(store.hero_mobile)} type="video/mp4" />
+      </video>
+    </section>}
+    <section class="drop-products" id="DropProducts">
+      <h1>{collection ? collection.title.toUpperCase() : store.home_heading}</h1>
+      {soldOut ? <p class="drop-sold-out">Our T-shirts are sold out. Their collection will return here when available.</p>
+        : <div class="drop-grid">{products.map((product, index) => <ProductCard product={product} eager={index === 0} />)}</div>}
+    </section>
+  </>}
+</Store>

@@ -1,0 +1,29 @@
+---
+import { env } from 'cloudflare:workers';
+import Store from '../../layouts/Store.astro';
+import SignIn from '../../components/SignIn.astro';
+import { all } from '../../lib/db.js';
+import { currentUser, emailReady } from '../../lib/auth.js';
+import { displayDate, money } from '../../lib/content.js';
+const user = await currentUser(env, Astro);
+const offset = Math.max(0, Math.min(10000, Number.parseInt(Astro.url.searchParams.get('offset') ?? '0', 10) || 0));
+const orders = user ? await all(env.DB.prepare(`SELECT id, created_at, status, payment_status, total FROM orders
+  WHERE email = ? COLLATE NOCASE ORDER BY created_at DESC LIMIT 26 OFFSET ?`).bind(user.email, offset)) : [];
+---
+<Store title="My account" noIndex>
+  <section class="store-checkout">
+    <h1>MY ACCOUNT</h1>
+    {user ? <>
+      <p>{user.email}</p>
+      <h2>Orders</h2>
+      {orders.length ? <ul class="account-orders">{orders.slice(0, 25).map((order) => <li>
+        <a href={'/orders/' + order.id}>Order {order.id.slice(0, 8).toUpperCase()}</a> · {displayDate(order.created_at)} · {money(order.total, true)} · {order.status}
+      </li>)}</ul> : <p>No orders yet.</p>}
+      <p>{offset > 0 && <a href={'/account?offset=' + Math.max(0, offset - 25)}>Previous</a>} {orders.length > 25 && <a href={'/account?offset=' + (offset + 25)}>Next</a>}</p>
+      <form method="post" action="/account/session">
+        <input type="hidden" name="action" value="logout" />
+        <button class="btn" type="submit">SIGN OUT</button>
+      </form>
+    </> : <SignIn purpose="account" ready={emailReady(env)} />}
+  </section>
+</Store>

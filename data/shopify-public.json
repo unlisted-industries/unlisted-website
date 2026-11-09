@@ -1,0 +1,688 @@
+{
+  "source": "https://unlisted-shop.com",
+  "currency": "EGP",
+  "settings": {
+    "home_heading": "THE COZY DROP",
+    "hero_desktop": "shop/b372b8442c1d40fab68a56d7869c8748.HD-1080p-7.2Mbps-97353289.mp4",
+    "hero_mobile": "shop/b372b8442c1d40fab68a56d7869c8748.HD-720p-4.5Mbps-97353289.mp4",
+    "hero_poster": "shop/b372b8442c1d40fab68a56d7869c8748.thumbnail.0000000000.jpg",
+    "size_guide": "Size charts for the COZY collection will be added soon. Available sizes are S/M and L. Please contact us if you need help choosing.",
+    "navigation": [
+      {
+        "label": "Hoodies",
+        "url": "/?collection=hoodies",
+        "group": "collections"
+      },
+      {
+        "label": "Sweatpants",
+        "url": "/?collection=sweatpants",
+        "group": "collections"
+      },
+      {
+        "label": "Shipping & Returns",
+        "url": "/pages/shipping",
+        "group": "menu"
+      },
+      {
+        "label": "About Us",
+        "url": "/pages/about-us",
+        "group": "menu"
+      },
+      {
+        "label": "Contact Us",
+        "url": "/pages/contact",
+        "group": "menu"
+      }
+    ],
+    "socials": [
+      {
+        "label": "Instagram",
+        "url": "https://www.instagram.com/unlisted.eg/?hl=en"
+      },
+      {
+        "label": "TikTok",
+        "url": "https://www.tiktok.com/@unlisted.store"
+      },
+      {
+        "label": "Facebook",
+        "url": "https://www.facebook.com/profile.php?id=61593584198962"
+      }
+    ]
+  },
+  "media": [
+    {
+      "key": "shop/unlisted-cozy-fold-grey-1.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/unlisted-cozy-fold-grey-1.png?v=1791878687",
+      "type": "image/png",
+      "name": "unlisted-cozy-fold-grey-1.png"
+    },
+    {
+      "key": "shop/unlisted-cozy-fold-grey-2.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/unlisted-cozy-fold-grey-2.png?v=1791878661",
+      "type": "image/png",
+      "name": "unlisted-cozy-fold-grey-2.png"
+    },
+    {
+      "key": "shop/unlisted-cozy-fold-grey-3.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/unlisted-cozy-fold-grey-3.png?v=1791878673",
+      "type": "image/png",
+      "name": "unlisted-cozy-fold-grey-3.png"
+    },
+    {
+      "key": "shop/unlisted-cozy-fold-grey-4.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/unlisted-cozy-fold-grey-4.png?v=1791878699",
+      "type": "image/png",
+      "name": "unlisted-cozy-fold-grey-4.png"
+    },
+    {
+      "key": "shop/unlisted-cozy-straight-grey-1.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/unlisted-cozy-straight-grey-1.png?v=1791878605",
+      "type": "image/png",
+      "name": "unlisted-cozy-straight-grey-1.png"
+    },
+    {
+      "key": "shop/unlisted-cozy-straight-grey-2.webp",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/unlisted-cozy-straight-grey-2.webp?v=1791878624",
+      "type": "image/webp",
+      "name": "unlisted-cozy-straight-grey-2.webp"
+    },
+    {
+      "key": "shop/unlisted-cozy-straight-grey-3.webp",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/unlisted-cozy-straight-grey-3.webp?v=1791878634",
+      "type": "image/webp",
+      "name": "unlisted-cozy-straight-grey-3.webp"
+    },
+    {
+      "key": "shop/unlisted-cozy-straight-grey-4.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/unlisted-cozy-straight-grey-4.png?v=1791878647",
+      "type": "image/png",
+      "name": "unlisted-cozy-straight-grey-4.png"
+    },
+    {
+      "key": "shop/unlisted-cozy-hoodie-grey-1.webp",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/unlisted-cozy-hoodie-grey-1.webp?v=1791878551",
+      "type": "image/webp",
+      "name": "unlisted-cozy-hoodie-grey-1.webp"
+    },
+    {
+      "key": "shop/unlisted-cozy-hoodie-grey-2.webp",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/unlisted-cozy-hoodie-grey-2.webp?v=1791878614",
+      "type": "image/webp",
+      "name": "unlisted-cozy-hoodie-grey-2.webp"
+    },
+    {
+      "key": "shop/unlisted-cozy-hoodie-grey-3.jpg",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/unlisted-cozy-hoodie-grey-3.jpg?v=1791878581",
+      "type": "image/jpeg",
+      "name": "unlisted-cozy-hoodie-grey-3.jpg"
+    },
+    {
+      "key": "shop/unlisted-cozy-hoodie-grey-4.jpg",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/unlisted-cozy-hoodie-grey-4.jpg?v=1791878592",
+      "type": "image/jpeg",
+      "name": "unlisted-cozy-hoodie-grey-4.jpg"
+    },
+    {
+      "key": "shop/Front.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/Front.png?v=1788674217",
+      "type": "image/png",
+      "name": "Front.png"
+    },
+    {
+      "key": "shop/Back.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/Back.png?v=1788674236",
+      "type": "image/png",
+      "name": "Back.png"
+    },
+    {
+      "key": "shop/Fabric_X-S.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/Fabric_X-S.png?v=1788677582",
+      "type": "image/png",
+      "name": "Fabric_X-S.png"
+    },
+    {
+      "key": "shop/Santorini.jpg",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/Santorini.jpg?v=1788820326",
+      "type": "image/jpeg",
+      "name": "Santorini.jpg"
+    },
+    {
+      "key": "shop/ChatGPT_Image_Sep_8_2026_02_37_30_AM.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/ChatGPT_Image_Sep_8_2026_02_37_30_AM.png?v=1788824314",
+      "type": "image/png",
+      "name": "ChatGPT_Image_Sep_8_2026_02_37_30_AM.png"
+    },
+    {
+      "key": "shop/Front_0ab88f94-a932-4910-95f7-c8d9254b4364.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/Front_0ab88f94-a932-4910-95f7-c8d9254b4364.png?v=1788678751",
+      "type": "image/png",
+      "name": "Front_0ab88f94-a932-4910-95f7-c8d9254b4364.png"
+    },
+    {
+      "key": "shop/Back_012d6b12-884c-4ffe-be8f-702008258755.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/Back_012d6b12-884c-4ffe-be8f-702008258755.png?v=1788678779",
+      "type": "image/png",
+      "name": "Back_012d6b12-884c-4ffe-be8f-702008258755.png"
+    },
+    {
+      "key": "shop/Raquet.jpg",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/Raquet.jpg?v=1788820288",
+      "type": "image/jpeg",
+      "name": "Raquet.jpg"
+    },
+    {
+      "key": "shop/Front_5a8bf04d-940e-4cc1-94b7-9a89f17d7a6f.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/Front_5a8bf04d-940e-4cc1-94b7-9a89f17d7a6f.png?v=1788679197",
+      "type": "image/png",
+      "name": "Front_5a8bf04d-940e-4cc1-94b7-9a89f17d7a6f.png"
+    },
+    {
+      "key": "shop/Back_8da9936e-f739-4962-99c4-f96194e05f23.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/Back_8da9936e-f739-4962-99c4-f96194e05f23.png?v=1788679222",
+      "type": "image/png",
+      "name": "Back_8da9936e-f739-4962-99c4-f96194e05f23.png"
+    },
+    {
+      "key": "shop/Watch.png",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/Watch.png?v=1788820233",
+      "type": "image/png",
+      "name": "Watch.png"
+    },
+    {
+      "key": "shop/b372b8442c1d40fab68a56d7869c8748.HD-1080p-7.2Mbps-97353289.mp4",
+      "url": "https://cdn.shopify.com/videos/c/vp/b372b8442c1d40fab68a56d7869c8748/b372b8442c1d40fab68a56d7869c8748.HD-1080p-7.2Mbps-97353289.mp4",
+      "type": "video/mp4",
+      "name": "b372b8442c1d40fab68a56d7869c8748.HD-1080p-7.2Mbps-97353289.mp4"
+    },
+    {
+      "key": "shop/b372b8442c1d40fab68a56d7869c8748.HD-720p-4.5Mbps-97353289.mp4",
+      "url": "https://cdn.shopify.com/videos/c/vp/b372b8442c1d40fab68a56d7869c8748/b372b8442c1d40fab68a56d7869c8748.HD-720p-4.5Mbps-97353289.mp4",
+      "type": "video/mp4",
+      "name": "b372b8442c1d40fab68a56d7869c8748.HD-720p-4.5Mbps-97353289.mp4"
+    },
+    {
+      "key": "shop/b372b8442c1d40fab68a56d7869c8748.thumbnail.0000000000.jpg",
+      "url": "https://cdn.shopify.com/s/files/1/0769/8160/0410/files/preview_images/b372b8442c1d40fab68a56d7869c8748.thumbnail.0000000000.jpg?v=1791916831",
+      "type": "image/jpeg",
+      "name": "b372b8442c1d40fab68a56d7869c8748.thumbnail.0000000000.jpg"
+    }
+  ],
+  "products": [
+    {
+      "id": "shopify:15430614810778",
+      "handle": "cozy-fold-over-waist-sweatpants-grey",
+      "title": "COZY FOLD-OVER WAIST SWEATPANTS - GREY",
+      "description": "<h3>Description</h3><p>100% cotton sweatpants with a fold-over waist, two front pockets and two back pockets. Comfortable, cozy material and a relaxed fit for colder days. Designed in Europe and made in Egypt.</p><h3>Product care</h3><ul>\n<li>Hand wash or machine wash cold.</li>\n<li>Hang dry indoors or in a cool place.</li>\n<li>Do not tumble dry or dry with heat or in direct sun.</li>\n<li>Do not bleach.</li>\n</ul>",
+      "category": "sweatpants",
+      "featured": true,
+      "preorder": true,
+      "position": 2,
+      "option_names": [
+        "Size"
+      ],
+      "variants": [
+        {
+          "id": "67738977632410",
+          "title": "S/M",
+          "sku": "",
+          "options": [
+            "S/M"
+          ],
+          "price": 90000,
+          "compare_at": null,
+          "inventory": null,
+          "published_available": true,
+          "position": 1
+        },
+        {
+          "id": "67738977665178",
+          "title": "L",
+          "sku": "",
+          "options": [
+            "L"
+          ],
+          "price": 90000,
+          "compare_at": null,
+          "inventory": null,
+          "published_available": true,
+          "position": 2
+        }
+      ],
+      "images": [
+        {
+          "key": "shop/unlisted-cozy-fold-grey-1.png",
+          "alt": "COZY FOLD-OVER WAIST SWEATPANTS - GREY — image 1",
+          "position": 0,
+          "variant_id": null
+        },
+        {
+          "key": "shop/unlisted-cozy-fold-grey-2.png",
+          "alt": "COZY FOLD-OVER WAIST SWEATPANTS - GREY — image 2",
+          "position": 1,
+          "variant_id": null
+        },
+        {
+          "key": "shop/unlisted-cozy-fold-grey-3.png",
+          "alt": "COZY FOLD-OVER WAIST SWEATPANTS - GREY — image 3",
+          "position": 2,
+          "variant_id": null
+        },
+        {
+          "key": "shop/unlisted-cozy-fold-grey-4.png",
+          "alt": "COZY FOLD-OVER WAIST SWEATPANTS - GREY — image 4",
+          "position": 3,
+          "variant_id": null
+        }
+      ]
+    },
+    {
+      "id": "shopify:15430614745242",
+      "handle": "cozy-straight-leg-sweats-grey",
+      "title": "COZY STRAIGHT LEG SWEATS - GREY",
+      "description": "<h3>Description</h3><p>100% cotton straight-leg sweatpants with two front pockets and no back pockets. Soft, comfortable and cozy for everyday wear through winter. Designed in Europe and made in Egypt.</p><h3>Product care</h3><ul>\n<li>Hand wash or machine wash cold.</li>\n<li>Hang dry indoors or in a cool place.</li>\n<li>Do not tumble dry or dry with heat or in direct sun.</li>\n<li>Do not bleach.</li>\n</ul>",
+      "category": "sweatpants",
+      "featured": true,
+      "preorder": false,
+      "position": 1,
+      "option_names": [
+        "Size"
+      ],
+      "variants": [
+        {
+          "id": "67738977534106",
+          "title": "S/M",
+          "sku": "",
+          "options": [
+            "S/M"
+          ],
+          "price": 55000,
+          "compare_at": null,
+          "inventory": null,
+          "published_available": true,
+          "position": 1
+        },
+        {
+          "id": "67738977566874",
+          "title": "L",
+          "sku": "",
+          "options": [
+            "L"
+          ],
+          "price": 55000,
+          "compare_at": null,
+          "inventory": null,
+          "published_available": true,
+          "position": 2
+        }
+      ],
+      "images": [
+        {
+          "key": "shop/unlisted-cozy-straight-grey-1.png",
+          "alt": "COZY STRAIGHT LEG SWEATS - GREY — image 1",
+          "position": 0,
+          "variant_id": null
+        },
+        {
+          "key": "shop/unlisted-cozy-straight-grey-2.webp",
+          "alt": "COZY STRAIGHT LEG SWEATS - GREY — image 2",
+          "position": 1,
+          "variant_id": null
+        },
+        {
+          "key": "shop/unlisted-cozy-straight-grey-3.webp",
+          "alt": "COZY STRAIGHT LEG SWEATS - GREY — image 3",
+          "position": 2,
+          "variant_id": null
+        },
+        {
+          "key": "shop/unlisted-cozy-straight-grey-4.png",
+          "alt": "COZY STRAIGHT LEG SWEATS - GREY — image 4",
+          "position": 3,
+          "variant_id": null
+        }
+      ]
+    },
+    {
+      "id": "shopify:15430614679706",
+      "handle": "cozy-hoodie-grey",
+      "title": "COZY HOODIE - GREY",
+      "description": "<h3>Description</h3><p>100% cotton hoodie with a double-layered hood and front pocket. The dropped shoulders and oversized fit make it an easy layer for colder days. Designed in Europe and made in Egypt.</p><h3>Product care</h3><ul>\n<li>Hand wash or machine wash cold.</li>\n<li>Hang dry indoors or in a cool place.</li>\n<li>Do not tumble dry or dry with heat or in direct sun.</li>\n<li>Do not bleach.</li>\n</ul>",
+      "category": "hoodies",
+      "featured": true,
+      "preorder": false,
+      "position": 0,
+      "option_names": [
+        "Size"
+      ],
+      "variants": [
+        {
+          "id": "67738977435802",
+          "title": "S/M",
+          "sku": "",
+          "options": [
+            "S/M"
+          ],
+          "price": 60000,
+          "compare_at": null,
+          "inventory": null,
+          "published_available": true,
+          "position": 1
+        },
+        {
+          "id": "67738977468570",
+          "title": "L",
+          "sku": "",
+          "options": [
+            "L"
+          ],
+          "price": 60000,
+          "compare_at": null,
+          "inventory": null,
+          "published_available": true,
+          "position": 2
+        }
+      ],
+      "images": [
+        {
+          "key": "shop/unlisted-cozy-hoodie-grey-1.webp",
+          "alt": "COZY HOODIE - GREY — image 1",
+          "position": 0,
+          "variant_id": null
+        },
+        {
+          "key": "shop/unlisted-cozy-hoodie-grey-2.webp",
+          "alt": "COZY HOODIE - GREY — image 2",
+          "position": 1,
+          "variant_id": null
+        },
+        {
+          "key": "shop/unlisted-cozy-hoodie-grey-3.jpg",
+          "alt": "COZY HOODIE - GREY — image 3",
+          "position": 2,
+          "variant_id": null
+        },
+        {
+          "key": "shop/unlisted-cozy-hoodie-grey-4.jpg",
+          "alt": "COZY HOODIE - GREY — image 4",
+          "position": 3,
+          "variant_id": null
+        }
+      ]
+    },
+    {
+      "id": "shopify:9138480906394",
+      "handle": "santorini-tee",
+      "title": "SANTORINI TEE",
+      "description": "<p class=\"PDq2pG_selectionAnchorContainer\">A clean, balanced fit, not too oversized, not too fitted, and the perfect length.<br>Made from premium 100% cotton with a balanced weight: substantial enough to feel premium, yet light and breathable enough to stay comfortable.<br>Finished with a high-quality back print designed to stay sharp wash after wash when cared for properly.</p>",
+      "category": "t-shirts",
+      "featured": false,
+      "preorder": false,
+      "position": 6,
+      "option_names": [
+        "Size"
+      ],
+      "variants": [
+        {
+          "id": "49182548230298",
+          "title": "S / M",
+          "sku": "UNL-SAN-SM",
+          "options": [
+            "S / M"
+          ],
+          "price": 50000,
+          "compare_at": null,
+          "inventory": null,
+          "published_available": false,
+          "position": 1
+        },
+        {
+          "id": "49182408442010",
+          "title": "L",
+          "sku": "UNL-SAN-L",
+          "options": [
+            "L"
+          ],
+          "price": 50000,
+          "compare_at": null,
+          "inventory": null,
+          "published_available": false,
+          "position": 2
+        }
+      ],
+      "images": [
+        {
+          "key": "shop/Front.png",
+          "alt": "SANTORINI TEE — image 1",
+          "position": 0,
+          "variant_id": null
+        },
+        {
+          "key": "shop/Back.png",
+          "alt": "SANTORINI TEE — image 2",
+          "position": 1,
+          "variant_id": "49182408442010"
+        },
+        {
+          "key": "shop/Fabric_X-S.png",
+          "alt": "SANTORINI TEE — image 3",
+          "position": 2,
+          "variant_id": null
+        },
+        {
+          "key": "shop/Santorini.jpg",
+          "alt": "SANTORINI TEE — image 4",
+          "position": 3,
+          "variant_id": null
+        },
+        {
+          "key": "shop/ChatGPT_Image_Sep_8_2026_02_37_30_AM.png",
+          "alt": "SANTORINI TEE — image 5",
+          "position": 4,
+          "variant_id": null
+        }
+      ]
+    },
+    {
+      "id": "shopify:9138687738010",
+      "handle": "le-club-racquet-tee",
+      "title": "LE CLUB RACQUET TEE",
+      "description": "<p class=\"PDq2pG_selectionAnchorContainer\">A clean, balanced fit, not too oversized, not too fitted, and the perfect length.<br>Made from premium 100% cotton with a balanced weight: substantial enough to feel premium, yet light and breathable enough to stay comfortable.<br>Finished with a high-quality back print designed to stay sharp wash after wash when cared for properly.</p>",
+      "category": "t-shirts",
+      "featured": false,
+      "preorder": false,
+      "position": 7,
+      "option_names": [
+        "Size"
+      ],
+      "variants": [
+        {
+          "id": "49182644371610",
+          "title": "S / M",
+          "sku": "UNL-LC-SM",
+          "options": [
+            "S / M"
+          ],
+          "price": 50000,
+          "compare_at": null,
+          "inventory": null,
+          "published_available": false,
+          "position": 1
+        },
+        {
+          "id": "49182644404378",
+          "title": "L",
+          "sku": "UNL-LC-L",
+          "options": [
+            "L"
+          ],
+          "price": 50000,
+          "compare_at": null,
+          "inventory": null,
+          "published_available": false,
+          "position": 2
+        }
+      ],
+      "images": [
+        {
+          "key": "shop/Front_0ab88f94-a932-4910-95f7-c8d9254b4364.png",
+          "alt": "LE CLUB RACQUET TEE — image 1",
+          "position": 0,
+          "variant_id": null
+        },
+        {
+          "key": "shop/Back_012d6b12-884c-4ffe-be8f-702008258755.png",
+          "alt": "LE CLUB RACQUET TEE — image 2",
+          "position": 1,
+          "variant_id": "49182644371610"
+        },
+        {
+          "key": "shop/Fabric_X-S.png",
+          "alt": "LE CLUB RACQUET TEE — image 3",
+          "position": 2,
+          "variant_id": null
+        },
+        {
+          "key": "shop/Raquet.jpg",
+          "alt": "LE CLUB RACQUET TEE — image 4",
+          "position": 3,
+          "variant_id": null
+        },
+        {
+          "key": "shop/ChatGPT_Image_Sep_8_2026_02_37_30_AM.png",
+          "alt": "LE CLUB RACQUET TEE — image 5",
+          "position": 4,
+          "variant_id": null
+        }
+      ]
+    },
+    {
+      "id": "shopify:9138708185242",
+      "handle": "escape-9-5-tee",
+      "title": "ESCAPE 9–5 TEE",
+      "description": "<p class=\"PDq2pG_selectionAnchorContainer\">A clean, balanced fit, not too oversized, not too fitted, and the perfect length.<br>Made from premium 100% cotton with a balanced weight: substantial enough to feel premium, yet light and breathable enough to stay comfortable.<br>Finished with a high-quality back print designed to stay sharp wash after wash when cared for properly.</p>",
+      "category": "t-shirts",
+      "featured": false,
+      "preorder": false,
+      "position": 8,
+      "option_names": [
+        "Size"
+      ],
+      "variants": [
+        {
+          "id": "49182670979226",
+          "title": "S / M",
+          "sku": "UNL-ESC-SM",
+          "options": [
+            "S / M"
+          ],
+          "price": 50000,
+          "compare_at": null,
+          "inventory": null,
+          "published_available": false,
+          "position": 1
+        },
+        {
+          "id": "49182671011994",
+          "title": "L",
+          "sku": "UNL-ESC-L",
+          "options": [
+            "L"
+          ],
+          "price": 50000,
+          "compare_at": null,
+          "inventory": null,
+          "published_available": false,
+          "position": 2
+        }
+      ],
+      "images": [
+        {
+          "key": "shop/Front_5a8bf04d-940e-4cc1-94b7-9a89f17d7a6f.png",
+          "alt": "ESCAPE 9–5 TEE — image 1",
+          "position": 0,
+          "variant_id": null
+        },
+        {
+          "key": "shop/Back_8da9936e-f739-4962-99c4-f96194e05f23.png",
+          "alt": "ESCAPE 9–5 TEE — image 2",
+          "position": 1,
+          "variant_id": "49182670979226"
+        },
+        {
+          "key": "shop/Fabric_X-S.png",
+          "alt": "ESCAPE 9–5 TEE — image 3",
+          "position": 2,
+          "variant_id": null
+        },
+        {
+          "key": "shop/Watch.png",
+          "alt": "ESCAPE 9–5 TEE — image 4",
+          "position": 3,
+          "variant_id": null
+        },
+        {
+          "key": "shop/ChatGPT_Image_Sep_8_2026_02_37_30_AM.png",
+          "alt": "ESCAPE 9–5 TEE — image 5",
+          "position": 4,
+          "variant_id": null
+        }
+      ]
+    }
+  ],
+  "collections": [
+    {
+      "handle": "frontpage",
+      "title": "Home page",
+      "description": "",
+      "products": [
+        "shopify:9138480906394",
+        "shopify:9138687738010",
+        "shopify:9138708185242"
+      ]
+    },
+    {
+      "handle": "t-shirts",
+      "title": "T-SHIRTS",
+      "description": "",
+      "products": [
+        "shopify:9138708185242",
+        "shopify:9138687738010",
+        "shopify:9138480906394"
+      ]
+    },
+    {
+      "handle": "hoodies",
+      "title": "Hoodies",
+      "description": "",
+      "products": [
+        "shopify:15430614679706"
+      ]
+    },
+    {
+      "handle": "sweatpants",
+      "title": "Sweatpants",
+      "description": "",
+      "products": [
+        "shopify:15430614745242",
+        "shopify:15430614810778"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "handle": "shipping",
+      "title": "Shipping & Returns",
+      "body": "<h2>Shipping</h2><p>Delivery in Egypt usually takes 2–4 days after your order is dispatched. For pre-orders, we’ll contact you when your item is ready; no dispatch date is promised yet.</p><h2>Returns &amp; exchanges</h2><p>You can request a return or size exchange within 14 days of delivery. Items must be unworn, unused and in new condition, suitable to be sold again. Size exchanges are welcome, subject to availability.</p><p>To arrange a return or exchange, please <a href=\"/pages/contact\">contact us</a> with your order details.</p>"
+    },
+    {
+      "handle": "about-us",
+      "title": "About Us",
+      "body": "<p class=\"PDq2pG_selectionAnchorContainer\"><strong>UNLISTED is built around one simple idea: good taste doesn’t need to be loud.</strong><span class=\"PDq2pG_selectionAnchor\"></span></p>\n<p>We create everyday pieces with a clean, considered approach focusing on fit, fabric, detail, and how each piece actually feels when worn.</p>\n<p>Our first drop is designed in Egypt and made in limited quantities, with every release kept intentional rather than overproduced.</p>\n<p><strong>A Matter of Taste.</strong></p>"
+    },
+    {
+      "handle": "contact",
+      "title": "Contact Us",
+      "body": "<p>Leave your email and our customer service team will get back to you.</p>"
+    }
+  ]
+}

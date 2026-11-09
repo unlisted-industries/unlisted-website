@@ -1,0 +1,24 @@
+---
+import { env } from 'cloudflare:workers';
+import { all } from '../../lib/db.js';
+import { money } from '../../lib/content.js';
+import Discount from './Discount.astro';
+import ShippingRate from './ShippingRate.astro';
+const { section } = Astro.props;
+const discounts = section === 'discounts';
+const rows = await all(env.DB.prepare(discounts ? 'SELECT * FROM discounts ORDER BY code' : 'SELECT * FROM shipping_rates ORDER BY label'));
+---
+<div class="admin-heading">
+  <div><p class="overline">CHECKOUT</p><h1>{discounts ? 'Discounts' : 'Shipping'}</h1>
+    <p>{discounts ? 'Create percentage or fixed codes with usage limits and active dates.' : 'Set and verify delivery rates by Egyptian governorate before enabling them.'}</p></div>
+</div>
+<section class="panel">
+  <h2>{discounts ? 'Discount codes' : 'Governorate rates'}</h2>
+  {rows.map((row) => <details class="admin-detail">
+    <summary>{discounts ? row.code + ' · ' + (row.kind === 'percent' ? row.value + '%' : money(row.value, true)) + ' · ' + row.uses + ' used'
+      : row.label + ' · ' + money(row.amount, true)} · {row.active ? 'Active' : 'Inactive'}</summary>
+    {discounts ? <Discount discount={row} /> : <ShippingRate rate={row} />}
+  </details>)}
+  {!rows.length && <p class="muted">{discounts ? 'No discount codes yet.' : 'No rates yet. Add each verified governorate rate below.'}</p>}
+</section>
+<section class="panel"><h2>{discounts ? 'Add a discount' : 'Add a rate'}</h2>{discounts ? <Discount /> : <ShippingRate />}</section>

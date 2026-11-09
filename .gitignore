@@ -5,3 +5,7 @@ dist
 .env
 .env.*
 .dev.vars
+!.env.example
+.dev.vars.*
+.local/
+.wrangler.deploy.json

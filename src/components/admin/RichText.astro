@@ -1,0 +1,17 @@
+---
+import { safeHtml } from '../../lib/content.js';
+const { name, label, value = '' } = Astro.props;
+---
+<div class="rich-text" data-rich-text>
+  <label><span>{label}</span><textarea name={name} rows="6" data-rich-value>{value}</textarea></label>
+  <div data-rich-controls hidden>
+    <div class="rich-buttons" aria-label={label + ' formatting'}>
+      <button type="button" data-command="bold" aria-label="Bold"><strong>B</strong></button>
+      <button type="button" data-command="italic" aria-label="Italic"><em>I</em></button>
+      <button type="button" data-command="insertUnorderedList" aria-label="Bullet list">• List</button>
+      <button type="button" data-command="formatBlock" data-argument="h3">Heading</button>
+      <button type="button" data-command="formatBlock" data-argument="p">Paragraph</button>
+    </div>
+    <div data-rich-editor class="rich-editor" role="textbox" aria-label={label} aria-multiline="true" contenteditable="true" set:html={safeHtml(value)} />
+  </div>
+</div>

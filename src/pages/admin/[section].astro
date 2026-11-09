@@ -1,0 +1,22 @@
+---
+import { env } from 'cloudflare:workers';
+import Admin from '../../layouts/Admin.astro';
+import Products from '../../components/admin/Products.astro';
+import Content from '../../components/admin/Content.astro';
+import Orders from '../../components/admin/Orders.astro';
+import StoreControls from '../../components/admin/StoreControls.astro';
+import { currentUser } from '../../lib/auth.js';
+import { adminSections } from '../../lib/admin.js';
+const user = await currentUser(env, Astro, 'admin');
+if (!user) return Astro.redirect('/admin/login', 303);
+const section = Astro.params.section;
+const label = adminSections.find(([key]) => key === section)?.[1];
+if (!label) Astro.response.status = 404;
+---
+<Admin title={label ?? 'Page not found'} section={section} user={user}>
+  {!label ? <h1>Page not found</h1>
+    : section === 'products' || section === 'collections' ? <Products section={section} />
+    : section === 'orders' || section === 'customers' || section === 'inbox' ? <Orders section={section} />
+    : section === 'content' || section === 'media' || section === 'settings' ? <Content section={section} />
+    : <StoreControls section={section} />}
+</Admin>

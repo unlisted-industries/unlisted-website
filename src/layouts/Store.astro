@@ -1,0 +1,79 @@
+---
+import { env } from 'cloudflare:workers';
+import { getSettings } from '../lib/catalog.js';
+import { cartCount } from '../lib/cart.js';
+import { safeLink } from '../lib/content.js';
+
+const { title, description = 'A Matter of Taste.', noIndex = false } = Astro.props;
+const [store, count] = await Promise.all([getSettings(Astro, env.DB), cartCount(env.DB, Astro)]);
+const collections = store.navigation.filter((link) => link.group === 'collections' && safeLink(link.url));
+const navigation = store.navigation.filter((link) => link.group !== 'collections' && safeLink(link.url));
+const supportOrder = ['/pages/contact', '/pages/shipping', '/pages/about-us'];
+const support = supportOrder.flatMap((url) => navigation.filter((link) => link.url === url));
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    {(noIndex || Astro.url.hostname.endsWith('.workers.dev')) && <meta name="robots" content="noindex,nofollow" />}
+    <title>{title ? title + ' – ' + store.name : store.name + ' – ' + store.name}</title>
+    <style is:inline>:root{--navy:#0b1830;--blue:#14294c;--paper:#fff;--ink:#3a465c;--muted:#5a6478;--red:#c8102e}</style>
+    <link rel="stylesheet" href="/theme/theme.css" />
+    <link rel="stylesheet" href="/theme/drop2.css" />
+    <link rel="stylesheet" href="/theme/unlisted-enhancements.css" />
+    <link rel="stylesheet" href="/theme/product-upsell.css" />
+    <link rel="stylesheet" href="/theme/store.css" />
+    <script is:inline src="/theme/store.js" defer></script>
+  </head>
+  <body>
+    <div class="shell">
+      <a class="visually-hidden skip-link" href="#MainContent">Skip to content</a>
+      <header class="header">
+        <div class="head-side">
+          <button class="menu-btn" type="button" data-open-menu aria-label="Open menu" aria-controls="MenuOverlay" aria-expanded="false"><i></i><i></i><i></i></button>
+          <a class="logo-link" href="/" aria-label="UNLISTED home" style="width:118px"><span class="site-logo" aria-hidden="true"></span></a>
+        </div>
+        <a class="cart-btn unl-header-cart" href="/cart" aria-label={'View shopping cart, ' + count + ' items'}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/>
+            <path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H6"/>
+          </svg>
+          <span class="cart-count">{count}</span>
+        </a>
+      </header>
+      <div class="overlay" id="MenuOverlay" aria-hidden="true" inert>
+        <div class="menu" role="dialog" aria-modal="true" aria-label="Main menu">
+          <div class="menu-top"><span>{store.name}</span><button class="close" type="button" data-close-menu aria-label="Close menu">×</button></div>
+          <nav class="menu-nav" aria-label="Main menu">
+            {collections.length > 0 && <details><summary>Collections</summary>{collections.map((link) => <a href={link.url}>{link.label}</a>)}</details>}
+            <button type="button" data-open-size-guide>Size Guide</button>
+            {navigation.map((link) => <a href={link.url}>{link.label}</a>)}
+          </nav>
+        </div>
+      </div>
+      <main id="MainContent" tabindex="-1"><slot /></main>
+      <footer class="footer">
+        <h2 class="footer-title">THE BORING STUFF</h2>
+        <div class="footer-grid">
+          <div>
+            <h3>SOCIALS</h3>
+            {store.socials.filter((link) => safeLink(link.url)).map((link) => <a href={link.url} target="_blank" rel="noopener noreferrer">{link.label}</a>)}
+          </div>
+          <div>
+            <h3>SUPPORT</h3>
+            {support.map((link) => <a href={link.url}>{link.url === '/pages/contact' && link.label === 'Contact Us' ? 'Contact us' : link.label}</a>)}
+            <a href="#SizeGuide" data-open-size-guide>Size guide</a>
+          </div>
+        </div>
+        <div class="footer-bottom"><span class="footer-logo" role="img" aria-label={store.name}></span><small>© {new Date().getUTCFullYear()}</small></div>
+      </footer>
+    </div>
+    <dialog id="SizeGuide" class="size-guide-dialog" aria-labelledby="SizeGuideTitle">
+      <div class="dialog-top"><h2 id="SizeGuideTitle" class="page-title">SIZE GUIDE</h2><button class="close" type="button" data-close-size-guide aria-label="Close size guide">×</button></div>
+      <p class="policy-note">{store.size_guide}</p>
+      <button class="btn guide-close-button" type="button" data-close-size-guide>GOT IT</button>
+    </dialog>
+  </body>
+</html>

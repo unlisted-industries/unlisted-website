@@ -1,0 +1,6 @@
+---
+const { op, area, query } = Astro.props;
+---
+<input type="hidden" name="op" value={op} />
+<input type="hidden" name="area" value={area} />
+{query && <input type="hidden" name="return_query" value={query} />}

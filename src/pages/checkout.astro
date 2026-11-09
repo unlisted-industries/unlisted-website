@@ -1,0 +1,85 @@
+---
+import { env } from 'cloudflare:workers';
+import Store from '../layouts/Store.astro';
+import Notice from '../components/Notice.astro';
+import { getSettings } from '../lib/catalog.js';
+import { cartId, getCart } from '../lib/cart.js';
+import { currentUser } from '../lib/auth.js';
+import { checkoutInput, checkoutReady, quote, shippingRates } from '../lib/checkout.js';
+import { formData, StoreError } from '../lib/http.js';
+import { cardReady } from '../lib/paymob.js';
+import { makeToken } from '../lib/db.js';
+import { money } from '../lib/content.js';
+
+const id = cartId(Astro);
+const [settings, cart, rates, user] = await Promise.all([
+  getSettings(Astro, env.DB), getCart(env.DB, id), shippingRates(env.DB), currentUser(env, Astro),
+]);
+const card = settings.card_enabled && cardReady(env);
+const enabled = checkoutReady(env, settings) && rates.length && (settings.cod_enabled || card);
+let input, review, error;
+if (Astro.request.method === 'POST' && enabled) {
+  try {
+    input = checkoutInput(await formData(Astro.request));
+    if (!(input.method === 'cod' && settings.cod_enabled || input.method === 'card' && card)) {
+      throw new StoreError('Select an available payment method.');
+    }
+    review = await quote(env.DB, id, input.governorate, input.coupon);
+  } catch (problem) {
+    error = problem instanceof StoreError ? problem.message : 'Checkout could not be reviewed. Try again.';
+  }
+}
+const ready = Boolean(enabled && cart.items.length);
+---
+<Store title="Checkout" noIndex>
+  <section class="store-checkout">
+    <h1>{review ? 'REVIEW YOUR ORDER' : 'CHECKOUT'}</h1>
+    <Notice />
+    {error && <p class="store-notice store-error" role="alert">{error}</p>}
+    {!cart.items.length ? <p>Your cart is empty. <a href="/">Shop the collection</a>.</p>
+      : !ready ? <p>Checkout is currently closed. <a href="/cart">Return to your cart</a>.</p>
+      : review ? <>
+        <p>{input.name} · {input.email}</p>
+        <p>{input.address}, {input.city}, {review.rate.label}, Egypt</p>
+        <ul class="account-orders">{review.items.map((line) => <li>{line.quantity} × {line.title} · {line.variant_title} · {money(line.quantity * line.price)}</li>)}</ul>
+        <dl class="store-totals">
+          <div><dt>Subtotal</dt><dd>{money(review.subtotal)}</dd></div>
+          <div><dt>Delivery</dt><dd>{money(review.rate.amount)}</dd></div>
+          {review.discount > 0 && <div><dt>Discount ({input.coupon})</dt><dd>−{money(review.discount)}</dd></div>}
+          <div><dt><strong>Total</strong></dt><dd><strong>{money(review.total)}</strong></dd></div>
+        </dl>
+        <p>{input.method === 'cod' ? 'Cash on delivery' : 'Pay by card on Paymob'}</p>
+        <form method="post" action="/api/checkout">
+          {Object.entries({ name: input.name, email: input.email, phone: input.phone, address: input.address,
+            city: input.city, governorate: input.governorate, discount: input.coupon, payment_method: input.method,
+            checkout_key: makeToken(), cart_version: review.version, quoted_total: review.total }).map(([key, value]) =>
+              <input type="hidden" name={key} value={value} />)}
+          <button class="btn" type="submit">{input.method === 'cod' ? 'PLACE ORDER' : 'CONTINUE TO SECURE PAYMENT'}</button>
+        </form>
+        <p><a href="/checkout">Edit delivery or payment details</a></p>
+      </> : <>
+        <p>Delivery in Egypt. {!user && <a href="/account">Sign in</a>}</p>
+        <dl class="store-totals"><div><dt>Cart subtotal</dt><dd>{money(cart.subtotal)}</dd></div></dl>
+        <form method="post" action="/checkout" class="form">
+          <label>Full name <input name="name" autocomplete="name" required maxlength="100" value={input?.name ?? user?.name} /></label>
+          <label>Email <input name="email" type="email" autocomplete="email" required maxlength="254" value={input?.email ?? user?.email} /></label>
+          <label>Phone <input name="phone" type="tel" autocomplete="tel" required maxlength="24" value={input?.phone} /></label>
+          <label>Street, building and apartment <textarea name="address" autocomplete="street-address" required maxlength="350">{input?.address}</textarea></label>
+          <label>City or district <input name="city" autocomplete="address-level2" required maxlength="100" value={input?.city} /></label>
+          <label>Governorate
+            <select name="governorate" autocomplete="address-level1" required>
+              <option value="">Choose your governorate</option>
+              {rates.map((rate) => <option value={rate.code} selected={input?.governorate === rate.code}>{rate.label} · {money(rate.amount, true)}</option>)}
+            </select>
+          </label>
+          <label>Discount code <input name="discount" maxlength="32" value={input?.coupon} /></label>
+          <fieldset>
+            <legend>Payment</legend>
+            {Boolean(settings.cod_enabled) && <label><input type="radio" name="payment_method" value="cod" checked={input?.method !== 'card'} required /> Cash on delivery</label>}
+            {Boolean(card) && <label><input type="radio" name="payment_method" value="card" checked={input?.method === 'card' || !settings.cod_enabled} required /> Card or wallet</label>}
+          </fieldset>
+          <button class="btn" type="submit">REVIEW ORDER</button>
+        </form>
+      </>}
+  </section>
+</Store>

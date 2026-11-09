@@ -1,0 +1,31 @@
+---
+import { env } from 'cloudflare:workers';
+import { all } from '../../lib/db.js';
+import { displayDate } from '../../lib/content.js';
+import { queryOffset } from '../../lib/admin.js';
+import Pagination from './Pagination.astro';
+const offset = queryOffset(Astro.url);
+const q = (Astro.url.searchParams.get('q') ?? '').slice(0, 140);
+const orders = await all(env.DB.prepare(`SELECT * FROM shopify_orders
+  WHERE ? = '' OR instr(lower(email), lower(?)) > 0 OR instr(lower(order_number), lower(?)) > 0
+  ORDER BY created_at DESC LIMIT 26 OFFSET ?`).bind(q, q, q, offset));
+---
+<section class="panel">
+  <div class="tabs"><a href="/admin/orders">Store orders</a><a href="/admin/orders?source=shopify" aria-current="page">Shopify archive</a></div>
+  <form method="get" class="inline-form">
+    <input type="hidden" name="source" value="shopify" />
+    <label>Search <input name="q" value={q} placeholder="Email or Shopify order number" /></label>
+    <button class="button">Search</button>
+  </form>
+  {orders.length ? <div class="table-wrap"><table>
+    <thead><tr><th>Shopify order</th><th>Customer</th><th>Status</th><th>Total</th></tr></thead>
+    <tbody>{orders.slice(0, 25).map((order) => <tr>
+      <td><details><summary>{order.order_number}</summary><ul>{JSON.parse(order.line_items).map((item) => <li>{item.quantity} × {item.name}</li>)}</ul></details>
+        <small>{displayDate(order.created_at)}</small></td>
+      <td>{order.email ?? 'Unavailable'}</td>
+      <td>{order.cancelled_at ? 'Cancelled' : order.fulfillment} · {order.payment}</td>
+      <td>{order.amount} {order.currency}</td>
+    </tr>)}</tbody>
+  </table></div> : <p class="muted">No archived orders found.</p>}
+  <Pagination offset={offset} more={orders.length > 25} />
+</section>

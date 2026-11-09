@@ -1,0 +1,114 @@
+---
+import { env } from 'cloudflare:workers';
+import { all } from '../../lib/db.js';
+import { getSettings, lookupPage } from '../../lib/catalog.js';
+import { cardReady } from '../../lib/paymob.js';
+import { emailReady } from '../../lib/auth.js';
+import { mediaUrl } from '../../lib/content.js';
+import { queryOffset } from '../../lib/admin.js';
+import Fields from './Fields.astro';
+import Pagination from './Pagination.astro';
+import RichText from './RichText.astro';
+const { section } = Astro.props;
+const content = section === 'content';
+const mediaPage = section === 'media';
+const slug = Astro.url.searchParams.get('page');
+const adding = Astro.url.searchParams.has('new');
+const offset = queryOffset(Astro.url);
+const [store, pages, page, media] = await Promise.all([
+  section === 'settings' ? getSettings(Astro, env.DB) : null,
+  content && !slug && !adding ? all(env.DB.prepare('SELECT * FROM pages ORDER BY title LIMIT 26 OFFSET ?').bind(offset)) : [],
+  content && slug ? lookupPage(env.DB, slug, true) : null,
+  content ? [] : all(env.DB.prepare(mediaPage ? 'SELECT * FROM media ORDER BY created_at DESC, original_name LIMIT 26 OFFSET ?'
+    : 'SELECT * FROM media ORDER BY original_name LIMIT 500').bind(...(mediaPage ? [offset] : []))),
+]);
+const nav = store ? [...store.navigation, ...Array.from({ length: Math.min(3, 24 - store.navigation.length) }, () => ({}))] : [];
+const social = store ? [...store.socials, ...Array.from({ length: Math.min(2, 24 - store.socials.length) }, () => ({}))] : [];
+const title = content ? page?.title ?? (adding ? 'Add a page' : 'Pages') : mediaPage ? 'Media' : 'Store settings';
+---
+<div class="admin-heading"><div><p class="overline">STOREFRONT</p><h1>{title}</h1>
+  {(page || adding) && <a class="quiet-link" href="/admin/content">← Back to pages</a>}</div>
+  {content && !adding && !slug && <a class="button primary" href="/admin/content?new=1">Add page</a>}
+</div>
+{content ? slug || adding ? slug && !page ? <p>Page was not found.</p> : <section class="panel">
+  <form method="post" action="/admin/action" class="admin-form">
+    <Fields op="page" area="content" query={slug ? 'page=' + slug : 'new=1'} />
+    <input type="hidden" name="mode" value={adding ? 'new' : 'edit'} />
+    <div class="form-grid">
+      <label>Title<input name="title" value={page?.title} required maxlength="150" /></label>
+      <label>URL handle<input name="handle" value={page?.handle} required maxlength="80" readonly={Boolean(page)} /></label>
+    </div>
+    <RichText name="body" label="Page content" value={page?.body} />
+    <label class="check"><input type="checkbox" name="active" checked={!page || page.active} /> Visible on storefront</label>
+    <button class="button primary">Save page</button>
+  </form>
+</section> : <section class="panel"><div class="table-wrap"><table>
+  <thead><tr><th>Page</th><th>Store link</th><th>Status</th></tr></thead>
+  <tbody>{pages.slice(0, 25).map((row) => <tr><td><a href={'/admin/content?page=' + row.handle}>{row.title}</a></td>
+    <td><a href={'/pages/' + row.handle}>/pages/{row.handle}</a></td><td><span class="pill">{row.active ? 'visible' : 'hidden'}</span></td></tr>)}</tbody>
+</table></div><Pagination offset={offset} more={pages.length > 25} /></section>
+: mediaPage ? <>
+  <section class="panel"><h2>Upload media</h2>
+    <form method="post" action="/admin/action" enctype="multipart/form-data" class="inline-form">
+      <Fields op="media" area="media" />
+      <label>JPEG, PNG, WebP or MP4 up to 16 MB <input type="file" name="file" accept="image/png,image/jpeg,image/webp,video/mp4" required /></label>
+      <button class="button primary">Upload</button>
+    </form>
+  </section>
+  <section class="panel"><h2>Library</h2><div class="media-grid">
+    {media.slice(0, 25).map((item) => <article>
+      {item.content_type.startsWith('image/') ? <img loading="lazy" src={mediaUrl(item.key)} alt="" />
+        : <span class="media-video">MP4</span>}
+      <a href={mediaUrl(item.key)} target="_blank" rel="noopener">{item.original_name}</a>
+    </article>)}
+  </div><Pagination offset={offset} more={media.length > 25} /></section>
+</> : <form method="post" action="/admin/action" class="admin-form">
+  <Fields op="settings" area="settings" />
+  <section class="panel">
+    <h2>Brand and homepage</h2>
+    <div class="form-grid">
+      <label>Store name<input name="name" required maxlength="80" value={store.name} /></label>
+      <label>Homepage heading<input name="home_heading" required maxlength="100" value={store.home_heading} /></label>
+      {[
+        ['hero_desktop', 'Desktop collection film', 'video/'], ['hero_mobile', 'Mobile collection film', 'video/'],
+        ['hero_poster', 'Collection film poster', 'image/'],
+      ].map(([key, label, type]) => <label>{label}<select name={key}>
+        <option value="">None</option>
+        {media.filter((item) => item.content_type.startsWith(type)).map((item) => <option value={item.key} selected={store[key] === item.key}>{item.original_name}</option>)}
+      </select></label>)}
+    </div>
+    <label>Size guide<textarea name="size_guide" rows="4" maxlength="3000">{store.size_guide}</textarea></label>
+  </section>
+  <section class="panel">
+    <h2>Navigation</h2>
+    <p class="muted">Use a store path or HTTPS link. Clear both fields to remove a link.</p>
+    <div class="link-rows">
+      {nav.map((item, index) => <div class="link-fields">
+        <label>Label<input name={'nav_label_' + index} value={item.label} maxlength="80" /></label>
+        <label>Link<input name={'nav_url_' + index} value={item.url} maxlength="500" /></label>
+        <label>Group<select name={'nav_group_' + index}><option value="menu">Main menu</option><option value="collections" selected={item.group === 'collections'}>Collections</option></select></label>
+      </div>)}
+    </div>
+    <h2>Social links</h2>
+    <div class="link-rows">{social.map((item, index) => <div class="link-fields social">
+      <label>Label<input name={'social_label_' + index} value={item.label} maxlength="80" /></label>
+      <label>Link<input name={'social_url_' + index} value={item.url} maxlength="500" /></label>
+    </div>)}</div>
+  </section>
+  <section class="panel">
+    <h2>Checkout and analytics</h2>
+    <p class="muted">Currency is EGP. Checkout requires verified inventory, active delivery rates and an available payment method.</p>
+    <div class="check-grid">
+      <label class="check"><input name="checkout_enabled" type="checkbox" checked={Boolean(store.checkout_enabled)} /> Enable checkout</label>
+      <label class="check"><input name="cod_enabled" type="checkbox" checked={Boolean(store.cod_enabled)} /> Cash on delivery</label>
+      <label class="check"><input name="card_enabled" type="checkbox" checked={Boolean(store.card_enabled)} /> Paymob checkout</label>
+      <label class="check"><input name="analytics_enabled" type="checkbox" checked={Boolean(store.analytics_enabled)} /> Store analytics</label>
+    </div>
+    <dl class="admin-kv">
+      <div><dt>Worker checkout gate</dt><dd>{env.CHECKOUT_ENABLED === 'true' ? 'Open' : 'Closed'}</dd></div>
+      <div><dt>Paymob</dt><dd>{cardReady(env) ? 'Configured' : 'Credentials pending'}</dd></div>
+      <div><dt>Sign-in and order email</dt><dd>{emailReady(env) ? 'Configured' : 'Credentials pending'}</dd></div>
+    </dl>
+  </section>
+  <button class="button primary">Save settings</button>
+</form>}

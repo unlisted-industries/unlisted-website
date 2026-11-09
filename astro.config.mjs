@@ -1,11 +1,12 @@
-import { defineConfig, sessionDrivers } from 'astro/config';
+import { defineConfig } from 'astro/config';
 import cloudflare from '@astrojs/cloudflare';
 
 export default defineConfig({
   output: 'server',
-  adapter: cloudflare({ imageService: 'passthrough' }), // images are pre-sized at upload; no paid/extra image service
-  session: { driver: sessionDrivers.memory() },          // we don't use Astro sessions; avoids needing a KV namespace
+  adapter: cloudflare({ imageService: 'passthrough' }),
+  session: false,
   site: 'https://unlisted-shop.com',
   trailingSlash: 'never',
+  devToolbar: { enabled: false },
   security: { checkOrigin: true },
 });

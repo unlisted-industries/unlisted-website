@@ -1,0 +1,12 @@
+---
+const { offset, more, step = 25 } = Astro.props;
+function page(next) {
+  const url = new URL(Astro.url);
+  url.searchParams.set('offset', String(next));
+  return url.pathname + url.search;
+}
+---
+{(offset > 0 || more) && <nav class="pagination" aria-label="Pages">
+  {offset > 0 && <a class="button" href={page(Math.max(0, offset - step))}>Previous</a>}
+  {more && <a class="button" href={page(offset + step)}>Next</a>}
+</nav>}

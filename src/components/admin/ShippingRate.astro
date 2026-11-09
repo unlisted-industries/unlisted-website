@@ -1,0 +1,14 @@
+---
+import Fields from './Fields.astro';
+const { rate } = Astro.props;
+---
+<form method="post" action="/admin/action" class="admin-form">
+  <Fields op="shipping" area="shipping" />
+  <div class="form-grid">
+    <label>Governorate name<input name="label" value={rate?.label} required maxlength="100" /></label>
+    <label>Code<input name="code" value={rate?.code} readonly={Boolean(rate)} required maxlength="80" placeholder="e.g. cairo" /></label>
+    <label>Delivery (EGP)<input name="amount" value={rate ? (rate.amount / 100).toFixed(2) : ''} inputmode="decimal" required /></label>
+    <label class="check"><input type="checkbox" name="active" checked={Boolean(rate?.active)} /> Available at checkout</label>
+  </div>
+  <button class="button primary">{rate ? 'Save rate' : 'Add rate'}</button>
+</form>

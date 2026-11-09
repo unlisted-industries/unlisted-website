@@ -1,0 +1,21 @@
+---
+import { env } from 'cloudflare:workers';
+import Store from '../../layouts/Store.astro';
+import ProductCard from '../../components/ProductCard.astro';
+import { available, getCollection } from '../../lib/catalog.js';
+import { safeHtml } from '../../lib/content.js';
+const collection = await getCollection(env.DB, Astro.params.handle);
+if (!collection) Astro.response.status = 404;
+const teesSoldOut = collection?.handle === 't-shirts' && !collection.products.some((product) => product.variants.some(available));
+---
+<Store title={collection?.title ?? 'Collection not found'} noIndex={!collection}>
+  {!collection || teesSoldOut ? <section class="page" style="max-width:900px;margin:auto;text-align:center;padding-top:70px">
+    <h1 class="page-title">{collection?.title ?? 'COLLECTION NOT FOUND'}</h1>
+    {teesSoldOut && <p class="policy-note">The T-shirts are sold out.</p>}
+    <a class="btn" style="max-width:340px;margin:24px auto" href="/">EXPLORE THE COZY DROP</a>
+  </section> : <section class="drop-products">
+    <h1>{collection.title.toUpperCase()}</h1>
+    {collection.description && <div class="description" set:html={safeHtml(collection.description)} />}
+    <div class="drop-grid">{collection.products.map((product, index) => <ProductCard product={product} eager={index === 0} />)}</div>
+  </section>}
+</Store>
