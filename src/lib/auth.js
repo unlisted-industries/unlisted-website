@@ -109,6 +109,20 @@ export async function currentUser(env, context, purpose = 'account') {
   return user && (purpose !== 'admin' || canAdmin(env, user.email)) ? user : null;
 }
 
+export async function openAdminSession(env, context, user) {
+  if (!canAdmin(env, user.email)) throw new StoreError('Owner sign-in is unavailable.', 403);
+  const { cookie, path, age } = accounts.admin;
+  const raw = makeToken(32);
+  const current = context.cookies.get(cookie)?.value;
+  const previous = isToken(current, 32) ? await sha256(current) : '';
+  await statements(env.DB, [
+    ["INSERT INTO sessions (digest, customer_id, purpose, expires_at) VALUES (?, ?, 'admin', ?)",
+      await sha256(raw), user.id, unixNow() + age],
+    ["DELETE FROM sessions WHERE digest = ? AND purpose = 'admin'", previous],
+  ]);
+  setCookie(context, cookie, raw, age, path);
+}
+
 export async function logout(env, context, purpose) {
   const settings = accounts[purpose];
   const raw = context.cookies.get(settings.cookie)?.value;

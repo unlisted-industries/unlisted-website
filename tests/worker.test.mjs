@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { after, before, test } from 'node:test';
+import { isoCBOR } from '@simplewebauthn/server/helpers';
 import { convertV4MiniflareOptions, Miniflare } from 'miniflare';
 import { unstable_getMiniflareWorkerOptions, unstable_splitSqlQuery } from 'wrangler';
 import { paymobSignedValue } from '../src/lib/paymob.js';
@@ -22,7 +23,9 @@ function browser() {
     let body;
     if (form) {
       headers.Origin ??= origin;
-      if (form instanceof FormData) {
+      if (headers['Content-Type'] === 'application/json') {
+        body = JSON.stringify(form);
+      } else if (form instanceof FormData) {
         const request = new Request(origin + path, { method: 'POST', body: form });
         headers['Content-Type'] = request.headers.get('Content-Type');
         body = new Uint8Array(await request.arrayBuffer());
@@ -51,7 +54,7 @@ before(async () => {
   runtime = new Miniflare(convertV4MiniflareOptions({
     ...workerOptions, modules, modulesRoot: root, d1Persist: false, r2Persist: false,
     bindings: {
-      CHECKOUT_ENABLED: 'true', ADMIN_EMAILS: owner, EMAIL_FROM: 'UNLISTED <sender@example.invalid>',
+      CHECKOUT_ENABLED: 'true', ADMIN_EMAILS: owner, ADMIN_ORIGIN: origin, EMAIL_FROM: 'UNLISTED <sender@example.invalid>',
       RESEND_API_KEY: 'test-email-key', PAYMOB_SECRET_KEY: 'test-paymob-secret', PAYMOB_PUBLIC_KEY: 'test-paymob-public',
       PAYMOB_INTEGRATION_IDS: '101', PAYMOB_HMAC_SECRET: secret, PAYMENT_ORIGIN: origin,
     },
@@ -271,4 +274,64 @@ test('storefront search, size chart and COZY matching item follow the supplied t
   assert.equal(upsell.headers.get('Location'), sweats);
   assert.doesNotMatch(await (await web('/cart')).text(), /COMPLETE THE LOOK/);
   assert.doesNotMatch(await (await web(sweats)).text(), /COMPLETE THE LOOK/);
+});
+
+test('owner passkeys require an owner session to enroll and a fresh verified assertion to sign in', async () => {
+  const passkey = (web, action, response) => web('/admin/passkey', { action, response }, { 'Content-Type': 'application/json' });
+  const web = browser();
+  assert.equal((await passkey(web, 'register-options')).status, 401);
+  assert.match(await (await web('/admin/login')).text(), /Sign in with a passkey/);
+  const optionsResponse = await passkey(admin, 'register-options');
+  assert.equal(optionsResponse.status, 200);
+  const registration = await optionsResponse.json();
+  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const { x, y } = publicKey.export({ format: 'jwk' });
+  const coseKey = new Map([[1, 2], [3, -7], [-1, 1], [-2, Buffer.from(x, 'base64url')], [-3, Buffer.from(y, 'base64url')]]);
+  const credentialId = randomBytes(32);
+  const id = credentialId.toString('base64url');
+  const rpIdHash = createHash('sha256').update(registration.rp.id).digest();
+  const authData = Buffer.concat([
+    rpIdHash, Buffer.from([0x45]), Buffer.alloc(20), Buffer.from([0, credentialId.length]),
+    credentialId, Buffer.from(isoCBOR.encode(coseKey)),
+  ]);
+  const attestation = isoCBOR.encode(new Map([['fmt', 'none'], ['attStmt', new Map()], ['authData', authData]]));
+  const clientData = (type, challenge, site = origin) => Buffer.from(JSON.stringify({ type, challenge, origin: site }));
+  const credential = { id, rawId: id, type: 'public-key', clientExtensionResults: {} };
+  const registered = {
+    ...credential,
+    response: {
+      clientDataJSON: clientData('webauthn.create', registration.challenge).toString('base64url'),
+      attestationObject: Buffer.from(attestation).toString('base64url'),
+      transports: ['internal'],
+    },
+  };
+  const enrollment = await passkey(admin, 'register-verify', registered);
+  assert.equal(enrollment.status, 200, await enrollment.text());
+  assert.equal((await passkey(admin, 'register-verify', registered)).status, 400);
+
+  function assertion(challenge, site) {
+    const client = clientData('webauthn.get', challenge, site);
+    const auth = Buffer.concat([rpIdHash, Buffer.from([0x05, 0, 0, 0, 1])]);
+    const signature = sign('sha256', Buffer.concat([auth, createHash('sha256').update(client).digest()]), privateKey);
+    return {
+      ...credential,
+      response: {
+        clientDataJSON: client.toString('base64url'), authenticatorData: auth.toString('base64url'),
+        signature: signature.toString('base64url'), userHandle: registration.user.id,
+      },
+    };
+  }
+  const wrongOrigin = await (await passkey(web, 'login-options')).json();
+  assert.equal((await passkey(web, 'login-verify', assertion(wrongOrigin.challenge, 'https://wrong.example'))).status, 401);
+  const login = await (await passkey(web, 'login-options')).json();
+  assert.equal(login.userVerification, 'required');
+  const signed = assertion(login.challenge, origin);
+  const verified = await passkey(web, 'login-verify', signed);
+  assert.equal(verified.status, 200, await verified.text());
+  assert.ok(verified.headers.getSetCookie().some((value) => value.startsWith('unlisted_admin=') &&
+    /; HttpOnly/i.test(value) && /; Secure/i.test(value) && /; Path=\/admin/i.test(value)));
+  assert.equal((await web('/admin')).status, 200);
+  await web('/admin/session', { action: 'logout' });
+  assert.equal((await passkey(web, 'login-verify', signed)).status, 400);
+  assert.equal((await web('/admin')).headers.get('Location'), '/admin/login');
 });

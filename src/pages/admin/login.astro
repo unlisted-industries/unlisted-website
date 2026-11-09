@@ -1,15 +1,22 @@
 ---
 import { env } from 'cloudflare:workers';
 import Admin from '../../layouts/Admin.astro';
+import AdminPasskey from '../../components/AdminPasskey.astro';
+import Notice from '../../components/Notice.astro';
 import SignIn from '../../components/SignIn.astro';
 import { currentUser, emailReady } from '../../lib/auth.js';
+import { passkeysReady } from '../../lib/admin-passkeys.js';
 if (await currentUser(env, Astro, 'admin')) return Astro.redirect('/admin', 303);
+const passkey = passkeysReady(env, Astro.url);
+const email = emailReady(env) && Boolean(env.ADMIN_EMAILS);
 ---
 <Admin title="Owner sign-in">
   <div class="panel">
     <p class="overline">STORE MANAGEMENT</p>
     <h1>Owner sign-in</h1>
-    <p>Use your approved store email address.</p>
-    <SignIn purpose="admin" ready={emailReady(env) && Boolean(env.ADMIN_EMAILS)} />
+    {passkey && <AdminPasskey mode="login" />}
+    {!passkey || email
+      ? <><p>Use your approved store email address.</p><SignIn purpose="admin" ready={email} /></>
+      : <><Notice /><p>Use the private owner access link the first time you sign in.</p></>}
   </div>
 </Admin>

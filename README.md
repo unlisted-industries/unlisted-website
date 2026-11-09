@@ -33,7 +33,8 @@ Verify https://unlisted-website.unlisted-yh.workers.dev/api/health and the publi
 
 ## Merchant setup
 
-- Set ADMIN_EMAILS, EMAIL_FROM, and RESEND_API_KEY in Cloudflare. Use an approved owner email and a verified Resend sender. Sign in at /admin.
+- Set ADMIN_EMAILS to the approved owner address and ADMIN_ORIGIN to the exact HTTPS origin for owner passkeys. Sign in once with a private owner link, then add a passkey from the dashboard. Owner passkeys are tied to that origin.
+- Set EMAIL_FROM and RESEND_API_KEY in Cloudflare using a verified sender for customer sign-in, receipts, and owner email recovery.
 - Confirm stock and delivery rates in the dashboard. Add each approved Egyptian governorate rate and any active discount codes. The public Shopify catalog has no stock counts or merchant shipping rates.
 - Configure the Paymob test secret, public key, integration IDs, HMAC secret, and PAYMENT_ORIGIN. See .env.example. Test a hosted card payment and a signed callback with the staging Worker. Cash on delivery can be enabled independently.
 - Checkout requires both CHECKOUT_ENABLED=true in the Worker and the dashboard checkout switch. Keep the merchant gates closed while the existing store and the replacement share inventory. Perform the final inventory reconciliation at cutover.

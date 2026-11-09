@@ -1,6 +1,8 @@
 ---
 import { env } from 'cloudflare:workers';
 import Admin from '../../layouts/Admin.astro';
+import AdminPasskey from '../../components/AdminPasskey.astro';
+import { passkeysReady } from '../../lib/admin-passkeys.js';
 import { currentUser, emailReady } from '../../lib/auth.js';
 import { dashboard } from '../../lib/admin.js';
 import { getSettings } from '../../lib/catalog.js';
@@ -51,6 +53,11 @@ const cards = [
         <div><dt>Paymob credentials</dt><dd>{cardReady(env) ? 'Configured' : 'Pending'}</dd></div>
         <div><dt>Email delivery</dt><dd>{emailReady(env) ? 'Configured' : 'Pending'}</dd></div>
       </dl>
+      {passkeysReady(env, Astro.url) && <div id="owner-passkeys">
+        <h2>Owner access</h2>
+        <p class="muted">Save a passkey to sign in with this device or your password manager.</p>
+        <AdminPasskey mode="register" />
+      </div>}
     </section>
   </div>
 </Admin>
