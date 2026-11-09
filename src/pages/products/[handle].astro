@@ -1,15 +1,16 @@
 ---
 import { env } from 'cloudflare:workers';
 import Store from '../../layouts/Store.astro';
-import { available, getProduct } from '../../lib/catalog.js';
+import CozyUpsell from '../../components/CozyUpsell.astro';
+import Notice from '../../components/Notice.astro';
+import { available, cozyMatch, getProduct } from '../../lib/catalog.js';
 import { mediaUrl, money, safeHtml } from '../../lib/content.js';
 const product = await getProduct(env.DB, Astro.params.handle);
 if (!product) Astro.response.status = 404;
 const variant = product?.variants.find((item) => item.id === Astro.url.searchParams.get('variant') && available(item))
   ?? product?.variants.find(available) ?? product?.variants[0];
-const matching = { 'cozy-hoodie-grey': 'cozy-straight-leg-sweats-grey', 'cozy-straight-leg-sweats-grey': 'cozy-hoodie-grey' };
-const related = matching[product?.handle] ? await getProduct(env.DB, matching[product.handle]) : null;
-const relatedVariants = related?.variants.filter(available) ?? [];
+const hasCozyMatch = Boolean(product && Object.hasOwn(cozyMatch, product.handle));
+const chart = mediaUrl(product?.size_chart_key);
 ---
 <Store title={product?.title ?? 'Page not found'} noIndex={!product}>
   {!product ? <section class="page"><h1 class="page-title">PRODUCT NOT FOUND</h1><p><a href="/">Back to the collection</a></p></section>
@@ -22,45 +23,33 @@ const relatedVariants = related?.variants.filter(available) ?? [];
       <div class="unl-product-images" aria-label="Product photos">
         {product.images.map((image, index) => <div class="unl-product-image">
           <img src={mediaUrl(image.key)} alt={image.alt} width="1000" height="1333" loading={index ? 'lazy' : 'eager'} />
-          {Boolean(matching[product.handle]) && index === 1 && <span class="unl-model-info">MODEL: 178 CM · 67 KG · WEARS S/M</span>}
+          {hasCozyMatch && index === 1 && <span class="unl-model-info">MODEL: 178 CM · 67 KG · WEARS S/M</span>}
         </div>)}
       </div>
       <div class="unl-product-info">
         <h1>{product.title}</h1>
+        <Notice />
         <p class="unl-product-price" data-variant-price>{money(variant?.price)}</p>
         {product.variants.some(available) ? <form method="post" action="/api/cart" id="UnlistedBuyForm">
           <label class="unl-size-label" for="UnlistedVariantSelect">{(product.option_names.join(' / ') || 'Variant').toUpperCase()}</label>
           <select id="UnlistedVariantSelect" name="variant" data-variant-picker required>
-            {product.variants.map((item) => <option value={item.id} disabled={!available(item)} selected={item.id === variant?.id} data-price={money(item.price)}>{item.title}{available(item) ? '' : ' · Sold out'}</option>)}
+            {product.variants.map((item) => <option value={item.id} disabled={!available(item)} selected={item.id === variant?.id} data-price={money(item.price)}>{item.title}{available(item) ? '' : ' — SOLD OUT'}</option>)}
           </select>
           <input type="hidden" name="quantity" value="1" />
           <button type="submit" name="action" value="add" class="btn unl-buy-button">ADD TO CART</button>
           <button type="submit" name="action" value="buy" class="btn unl-buy-now-button">BUY NOW</button>
         </form> : <button type="button" class="btn unl-buy-button" disabled>SOLD OUT</button>}
         <div class="unl-product-details">
-          <details><summary>Size chart</summary><p>Size chart coming soon.</p></details>
+          <details><summary>Size chart</summary>
+            {chart ? <a href={chart} target="_blank" rel="noopener" class="unl-size-chart">
+              <img src={chart} alt={product.title + ' size chart'} width="1536" height="1024" loading="lazy" />
+            </a> : <p>Size chart coming soon.</p>}
+          </details>
           <details><summary>Description</summary><div class="unl-product-description" set:html={safeHtml(product.description)} /></details>
           <details><summary>Shipping &amp; Returns</summary><p>Delivery in Egypt usually takes 2–4 days after dispatch. Returns and size exchanges are available within 14 days for unworn, unused items in new condition. <a href="/pages/shipping">Read the full policy</a>.</p></details>
           <details><summary>Product care</summary><p>Cold wash, hang dry in a cool place, keep away from heat and direct sunlight, and do not bleach. See garment care label.</p></details>
         </div>
-        {related && <aside class="unl-cozy-upsell" aria-label="Complete your COZY look">
-          <h2 class="unl-cozy-upsell-heading">COMPLETE THE LOOK</h2>
-          <div class="unl-cozy-upsell-content">
-            <a class="unl-cozy-upsell-image" href={'/products/' + related.handle} aria-label={'View ' + related.title}>
-              {related.images[0] && <img src={mediaUrl(related.images[0].key)} alt={related.title} width="340" height="453" loading="lazy" />}
-            </a>
-            <div class="unl-cozy-upsell-details">
-              <p class="unl-cozy-upsell-description">The matching piece for your everyday set.</p>
-              <a class="unl-cozy-upsell-title" href={'/products/' + related.handle}>{related.title}</a>
-              <p class="unl-cozy-upsell-price">{money(relatedVariants[0]?.price ?? related.variants[0]?.price)}</p>
-              {relatedVariants.length > 0 && <form class="unl-cozy-upsell-controls" method="post" action="/api/cart">
-                <label class="visually-hidden" for="UnlCozyVariant-product">Select size for {related.title}</label>
-                <select id="UnlCozyVariant-product" name="variant">{relatedVariants.map((item) => <option value={item.id}>{item.title}</option>)}</select>
-                <button class="unl-cozy-upsell-add" name="action" value="add">+ ADD TO CART</button>
-              </form>}
-            </div>
-          </div>
-        </aside>}
+        {hasCozyMatch && <CozyUpsell productHandle={product.handle} />}
       </div>
     </section>}
 </Store>

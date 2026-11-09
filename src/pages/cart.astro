@@ -2,6 +2,7 @@
 import { env } from 'cloudflare:workers';
 import Store from '../layouts/Store.astro';
 import Notice from '../components/Notice.astro';
+import CozyUpsell from '../components/CozyUpsell.astro';
 import { cartId, getCart } from '../lib/cart.js';
 import { mediaUrl, money } from '../lib/content.js';
 const cart = await getCart(env.DB, cartId(Astro));
@@ -20,24 +21,25 @@ const cart = await getCart(env.DB, cartId(Astro));
         </a>
         <div class="unl-cart-details">
           <a href={'/products/' + item.handle}>{item.title}</a>
-          <p>{item.variant_title} · {money(item.price)}</p>
+          {item.variant_title !== 'Default Title' && <p>SIZE: {item.variant_title}</p>}
+          <p>{money(item.price * item.quantity)}</p>
           {!item.available && <p role="status">This size or quantity is currently unavailable.</p>}
           <form method="post" action="/api/cart" class="store-quantity">
             <input type="hidden" name="variant" value={item.id} />
-            <div class="unl-quantity">
+            <div class="unl-quantity" role="group" aria-label={'Quantity for ' + item.title}>
               <button class="unl-quantity-button" name="quantity" value={item.quantity - 1} aria-label="Decrease quantity">−</button>
-              <span class="unl-quantity-value" aria-label={'Quantity ' + item.quantity}>{item.quantity}</span>
+              <span class="unl-quantity-value" aria-live="polite" aria-label={'Quantity ' + item.quantity}>{item.quantity}</span>
               <button class="unl-quantity-button" name="quantity" value={item.quantity + 1} aria-label="Increase quantity" disabled={item.quantity >= 25 || !item.available}>+</button>
             </div>
             <input type="hidden" name="action" value="update" />
             <button class="unl-cart-remove" name="quantity" value="0">REMOVE</button>
           </form>
         </div>
-        <strong>{money(item.price * item.quantity)}</strong>
       </article>)}
-      <p class="unl-cart-total"><span>SUBTOTAL</span><strong>{money(cart.subtotal)}</strong></p>
-      <p class="unl-cart-note">Shipping calculated at checkout.</p>
-      <div class="unl-cart-actions"><a class="btn unl-cart-update" href="/">CONTINUE SHOPPING</a><a class="btn" href="/checkout">CHECKOUT</a></div>
+      <CozyUpsell cartHandles={cart.items.map((item) => item.handle)} />
+      <div class="unl-cart-total"><span>SUBTOTAL</span><strong>{money(cart.subtotal)}</strong></div>
+      <p class="unl-cart-note">Shipping is calculated at checkout.</p>
+      <div class="unl-cart-actions"><a class="btn" href="/checkout">CHECKOUT</a></div>
     </>}
     <p class="store-account-link"><a href="/account">My account</a></p>
   </section>

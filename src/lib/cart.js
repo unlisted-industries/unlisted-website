@@ -64,3 +64,11 @@ export async function updateItem(db, context, variant, quantity) {
   ]);
   if (result[0].meta.changes !== 1) throw new StoreError('This size or quantity is unavailable.');
 }
+
+export async function cartProductHandles(db, context) {
+  const id = cartId(context);
+  if (!id) return [];
+  const rows = await all(db.prepare(`SELECT DISTINCT p.handle FROM cart_items c JOIN variants v ON v.id = c.variant_id
+    JOIN products p ON p.id = v.product_id WHERE c.cart_id = ?`).bind(id));
+  return rows.map(({ handle }) => handle);
+}

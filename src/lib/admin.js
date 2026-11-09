@@ -33,15 +33,19 @@ async function productAction(env, form) {
   const category = form.get('category') ? slugValue(form.get('category')) : '';
   const status = form.get('status');
   if (!['draft', 'active', 'archived'].includes(status)) throw new StoreError('Select a product status.');
-  const values = [title, description, category, status, checked(form, 'preorder'), checked(form, 'featured'),
+  const chart = textValue(form, 'size_chart_key', 185, false) || null;
+  if (chart && !await env.DB.prepare("SELECT 1 FROM media WHERE key = ? AND content_type LIKE 'image/%'").bind(chart).first()) {
+    throw new StoreError('Select a size chart image from the media library.');
+  }
+  const values = [title, description, category, status, chart, checked(form, 'preorder'), checked(form, 'featured'),
     quantityValue(form.get('position') || '0', 0, 999999), JSON.stringify(commaList(form, 'option_names'))];
   if (form.get('mode') === 'new') {
     const existing = await env.DB.prepare('SELECT 1 FROM products WHERE handle = ?').bind(handle).first();
     if (existing) throw new StoreError('This product handle is already in use.');
-    await env.DB.prepare(`INSERT INTO products (id, handle, title, description, category, status, preorder, featured, position, option_names)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(makeToken(), handle, ...values).run();
+    await env.DB.prepare(`INSERT INTO products (id, handle, title, description, category, status, size_chart_key, preorder, featured, position, option_names)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(makeToken(), handle, ...values).run();
   } else {
-    oneChange(await env.DB.prepare(`UPDATE products SET title = ?, description = ?, category = ?, status = ?,
+    oneChange(await env.DB.prepare(`UPDATE products SET title = ?, description = ?, category = ?, status = ?, size_chart_key = ?,
       preorder = ?, featured = ?, position = ?, option_names = ?, updated_at = unixepoch() WHERE handle = ?`)
       .bind(...values, handle).run(), 'Product was not found.');
   }

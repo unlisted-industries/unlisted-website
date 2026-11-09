@@ -27,7 +27,7 @@ const [record, list, media, members, allProducts] = await Promise.all([
     : all(env.DB.prepare(`SELECT c.*,
       (SELECT count(*) FROM collection_products WHERE collection_handle = c.handle) AS products
       FROM collections c WHERE instr(lower(title), lower(?)) > 0 OR ? = '' ORDER BY title LIMIT 26 OFFSET ?`).bind(q, q, offset)),
-  isProduct && handle ? all(env.DB.prepare("SELECT key, original_name FROM media WHERE content_type LIKE 'image/%' ORDER BY original_name LIMIT 500")) : [],
+  isProduct && editing ? all(env.DB.prepare("SELECT key, original_name FROM media WHERE content_type LIKE 'image/%' ORDER BY original_name LIMIT 500")) : [],
   !isProduct && handle ? all(env.DB.prepare('SELECT product_id FROM collection_products WHERE collection_handle = ?').bind(handle)) : [],
   !isProduct && editing ? all(env.DB.prepare('SELECT id, title, status FROM products ORDER BY title LIMIT 500')) : [],
 ]);
@@ -69,6 +69,7 @@ const label = isProduct ? 'Product' : 'Collection';
           <label>Display order<input name="position" type="number" min="0" value={record?.position ?? 0} /></label>
           <label>Options<input name="option_names" value={record?.option_names.join(', ')} placeholder="Size, Color" /></label>
           <label>Status<select name="status">{['draft', 'active', 'archived'].map((status) => <option selected={record?.status === status}>{status}</option>)}</select></label>
+          <label>Size chart<select name="size_chart_key"><option value="">No chart</option>{media.map((item) => <option value={item.key} selected={record?.size_chart_key === item.key}>{item.original_name}</option>)}</select></label>
           <label class="check"><input type="checkbox" name="featured" checked={Boolean(record?.featured)} /> Feature on home</label>
           <label class="check"><input type="checkbox" name="preorder" checked={Boolean(record?.preorder)} /> Free pre-order registration</label>
         </>}

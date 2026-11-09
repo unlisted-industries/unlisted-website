@@ -1,0 +1,36 @@
+---
+import { env } from 'cloudflare:workers';
+import Store from '../layouts/Store.astro';
+import { available, searchProducts } from '../lib/catalog.js';
+import { mediaUrl, money } from '../lib/content.js';
+
+const query = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 100);
+const products = query ? await searchProducts(env.DB, query) : [];
+---
+<Store title="Search" noIndex>
+  <section class="page">
+    <div class="eyebrow">SEARCH</div>
+    <h1 class="page-title">SEARCH UNLISTED</h1>
+    <form class="form" action="/search" method="get" role="search">
+      <input type="search" name="q" value={query} placeholder="Search products" aria-label="Search products" maxlength="100" />
+      <button class="btn" type="submit">SEARCH</button>
+    </form>
+    {query && <div class="grid" style="margin-top:26px">
+      {products.length ? products.map((product) => {
+        const variant = product.variants.find(available) ?? product.variants[0];
+        const sale = variant && variant.compare_at > variant.price;
+        return <a class="product-card" href={'/products/' + product.handle}>
+          <div class="photo">
+            <img src={mediaUrl(product.images[0]?.key) ?? '/theme/product-santorini.webp'} alt={product.images[0]?.alt ?? product.title} loading="lazy" width="960" height="1280" />
+          </div>
+          <div class="product-name">{product.title}</div>
+          <div class="price">
+            {sale && <span class="was">{money(variant.compare_at)}</span>}
+            {variant && <span class:list={['now', { regular: !sale }]}>{money(variant.price)}</span>}
+            {!product.variants.some(available) && <span class="sold-label">SOLD OUT</span>}
+          </div>
+        </a>;
+      }) : <p class="empty-state">No results found.</p>}
+    </div>}
+  </section>
+</Store>

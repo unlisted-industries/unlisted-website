@@ -1,6 +1,6 @@
 # UNLISTED™ Cloudflare store
 
-An Astro storefront and owner dashboard on Cloudflare Workers, D1 and R2. The storefront uses the live UNLISTED theme styles, typography, brand artwork, and public catalog captured on November 9, 2026. The Shopify theme ZIP is still needed for the final comparison against the original Liquid sections and settings.
+An Astro storefront and owner dashboard on Cloudflare Workers, D1 and R2. The storefront adapts the supplied Final website theme ZIP and the public UNLISTED catalog captured on November 9, 2026. Theme styles, fonts and brand artwork are served locally. The shipping and returns copy comes from the published store.
 
 ## Local development
 
@@ -45,4 +45,4 @@ The live store data is read-only during migration. For authenticated inventory, 
 
 The history mode exports accessible orders and customer emails with the corresponding protected-data scopes. Import history.sql privately into D1 to populate the Shopify archive in admin. Shopify may require all-orders access for older history. Legacy records do not affect current orders, inventory, or new-store analytics. Customers sign in with new email links.
 
-Verify the theme ZIP, mobile storefront, merchant settings, test checkout and rollback before requesting approval for any domain or subscription change. Keep Shopify credentials and exported customer data out of Git.
+Verify the staged mobile storefront, merchant settings, test checkout and rollback before requesting approval for any domain or subscription change. Keep Shopify credentials and exported customer data out of Git.

@@ -21,3 +21,4 @@ body.store-menu-open { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .overlay, .overlay .menu { transition: none; }
 }
+.unl-size-chart, .unl-size-chart img { display: block; width: 100%; max-width: 100%; height: auto; }

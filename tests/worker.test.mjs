@@ -69,7 +69,8 @@ before(async () => {
     },
   }));
   db = await runtime.getD1Database('DB');
-  for (const name of ['0001_store.sql', '0002_order_lookup.sql', '0003_shopify_history.sql']) {
+  const migrations = (await readdir(new URL('../migrations/', import.meta.url))).filter((name) => name.endsWith('.sql')).sort();
+  for (const name of migrations) {
     const migration = await readFile(new URL('../migrations/' + name, import.meta.url), 'utf8');
     await db.batch(unstable_splitSqlQuery(migration).map((query) => db.prepare(query)));
   }
@@ -244,4 +245,30 @@ test('owner can create a product, update inventory, and upload an image to R2', 
   const photo = /src="(\/media\/upload\/[a-f0-9]+\.png)"/.exec(markup)?.[1];
   assert.ok(photo);
   assert.equal((await browser()(photo)).status, 200);
+});
+
+test('storefront search, size chart and COZY matching item follow the supplied theme', async () => {
+  const chart = 'shop/sweatpants-chart.png';
+  await db.batch([
+    db.prepare("INSERT INTO media (key, content_type, original_name) VALUES (?, 'image/png', 'Size chart')").bind(chart),
+    db.prepare("INSERT INTO products (id, handle, title, status) VALUES ('hoodie', 'cozy-hoodie-grey', 'COZY HOODIE - GREY', 'active')"),
+    db.prepare("INSERT INTO products (id, handle, title, status, size_chart_key) VALUES ('sweats', 'cozy-straight-leg-sweats-grey', 'COZY STRAIGHT LEG SWEATS - GREY', 'active', ?)").bind(chart),
+    db.prepare("INSERT INTO variants (id, product_id, title, price, inventory) VALUES ('h', 'hoodie', 'S/M', 60000, 2), ('s', 'sweats', 'L', 55000, 2)"),
+  ]);
+  const web = browser();
+  const search = await (await web('/search?q=cozy+hoodie')).text();
+  assert.match(search, /SEARCH UNLISTED/);
+  assert.match(search, /COZY HOODIE - GREY/);
+  assert.doesNotMatch(search, /COZY STRAIGHT LEG SWEATS - GREY/);
+  const sweats = '/products/cozy-straight-leg-sweats-grey';
+  const product = await (await web(sweats)).text();
+  assert.match(product, /shopify-section-group-header-group/);
+  assert.match(product, /\/media\/shop\/sweatpants-chart\.png/);
+  assert.match(product, /COMPLETE THE LOOK/);
+  assert.equal((await web('/api/cart', { action: 'add', variant: 's' })).headers.get('Location'), '/cart');
+  assert.match(await (await web('/cart')).text(), /COMPLETE THE LOOK/);
+  const upsell = await web('/api/cart', { action: 'add', variant: 'h', return_product: 'cozy-straight-leg-sweats-grey' });
+  assert.equal(upsell.headers.get('Location'), sweats);
+  assert.doesNotMatch(await (await web('/cart')).text(), /COMPLETE THE LOOK/);
+  assert.doesNotMatch(await (await web(sweats)).text(), /COMPLETE THE LOOK/);
 });

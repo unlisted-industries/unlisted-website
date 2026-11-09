@@ -16,7 +16,9 @@ const support = supportOrder.flatMap((url) => navigation.filter((link) => link.u
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#ffffff" />
     <meta name="description" content={description} />
+    {!noIndex && Astro.site && <link rel="canonical" href={new URL(Astro.url.pathname, Astro.site)} />}
     {(noIndex || Astro.url.hostname.endsWith('.workers.dev')) && <meta name="robots" content="noindex,nofollow" />}
     <title>{title ? title + ' – ' + store.name : store.name + ' – ' + store.name}</title>
     <style is:inline>:root{--navy:#0b1830;--blue:#14294c;--paper:#fff;--ink:#3a465c;--muted:#5a6478;--red:#c8102e}</style>
@@ -29,28 +31,30 @@ const support = supportOrder.flatMap((url) => navigation.filter((link) => link.u
   </head>
   <body>
     <div class="shell">
-      <a class="visually-hidden skip-link" href="#MainContent">Skip to content</a>
-      <header class="header">
-        <div class="head-side">
-          <button class="menu-btn" type="button" data-open-menu aria-label="Open menu" aria-controls="MenuOverlay" aria-expanded="false"><i></i><i></i><i></i></button>
-          <a class="logo-link" href="/" aria-label="UNLISTED home" style="width:118px"><span class="site-logo" aria-hidden="true"></span></a>
-        </div>
-        <a class="cart-btn unl-header-cart" href="/cart" aria-label={'View shopping cart, ' + count + ' items'}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-            <circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/>
-            <path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H6"/>
-          </svg>
-          <span class="cart-count">{count}</span>
-        </a>
-      </header>
-      <div class="overlay" id="MenuOverlay" aria-hidden="true" inert>
-        <div class="menu" role="dialog" aria-modal="true" aria-label="Main menu">
-          <div class="menu-top"><span>{store.name}</span><button class="close" type="button" data-close-menu aria-label="Close menu">×</button></div>
-          <nav class="menu-nav" aria-label="Main menu">
-            {collections.length > 0 && <details><summary>Collections</summary>{collections.map((link) => <a href={link.url}>{link.label}</a>)}</details>}
-            <button type="button" data-open-size-guide>Size Guide</button>
-            {navigation.map((link) => <a href={link.url}>{link.label}</a>)}
-          </nav>
+      <div class="shopify-section-group-header-group">
+        <a class="visually-hidden skip-link" href="#MainContent">Skip to content</a>
+        <header class="header">
+          <div class="head-side">
+            <button class="menu-btn" type="button" data-open-menu aria-label="Open menu" aria-controls="MenuOverlay" aria-expanded="false"><i></i><i></i><i></i></button>
+            <a class="logo-link" href="/" aria-label="UNLISTED home" style="width:118px"><span class="site-logo" aria-hidden="true"></span></a>
+          </div>
+          <a class="cart-btn unl-header-cart" href="/cart" aria-label={'View shopping cart, ' + count + ' items'}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+              <circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/>
+              <path d="M3 4h2l2.4 11.2a2 2 0 0 0 2 1.6h7.8a2 2 0 0 0 2-1.6L21 8H6"/>
+            </svg>
+            <span class="cart-count">{count}</span>
+          </a>
+        </header>
+        <div class="overlay" id="MenuOverlay" aria-hidden="true" inert>
+          <div class="menu" role="dialog" aria-modal="true" aria-label="Main menu">
+            <div class="menu-top"><span>{store.name}</span><button class="close" type="button" data-close-menu aria-label="Close menu">×</button></div>
+            <nav class="menu-nav" aria-label="Main menu">
+              {collections.length > 0 && <details><summary>Collections</summary>{collections.map((link) => <a href={link.url}>{link.label}</a>)}</details>}
+              <button type="button" data-open-size-guide>Size Guide</button>
+              {navigation.map((link) => <a href={link.url}>{link.label}</a>)}
+            </nav>
+          </div>
         </div>
       </div>
       <main id="MainContent" tabindex="-1"><slot /></main>

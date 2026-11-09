@@ -1,0 +1,33 @@
+---
+import { env } from 'cloudflare:workers';
+import { cartProductHandles } from '../lib/cart.js';
+import { available, cozyMatch, getProduct } from '../lib/catalog.js';
+import { mediaUrl, money } from '../lib/content.js';
+
+const { productHandle, cartHandles } = Astro.props;
+const handles = cartHandles ?? await cartProductHandles(env.DB, Astro);
+const match = cozyMatch[productHandle ?? handles.find((handle) => Object.hasOwn(cozyMatch, handle))];
+const related = match && !handles.includes(match) ? await getProduct(env.DB, match) : null;
+const variants = related?.variants.filter(available) ?? [];
+const context = productHandle ? 'product' : 'cart';
+const picker = 'UnlCozyVariant-' + context;
+---
+{variants.length > 0 && <aside class="unl-cozy-upsell" aria-label="Complete your COZY look">
+  <h2 class="unl-cozy-upsell-heading">COMPLETE THE LOOK</h2>
+  <div class="unl-cozy-upsell-content">
+    <a class="unl-cozy-upsell-image" href={'/products/' + related.handle} aria-label={'View ' + related.title}>
+      {related.images[0] && <img src={mediaUrl(related.images[0].key)} alt={related.title} width="340" height="453" loading="lazy" />}
+    </a>
+    <div class="unl-cozy-upsell-details">
+      <p class="unl-cozy-upsell-description">The matching piece for your everyday set.</p>
+      <a class="unl-cozy-upsell-title" href={'/products/' + related.handle}>{related.title}</a>
+      <p class="unl-cozy-upsell-price">{money(variants[0].price)}</p>
+      <form class="unl-cozy-upsell-controls" method="post" action="/api/cart">
+        {productHandle && <input type="hidden" name="return_product" value={productHandle} />}
+        <label class="visually-hidden" for={picker}>Select size for {related.title}</label>
+        <select id={picker} name="variant">{variants.map((item) => <option value={item.id}>{item.title}</option>)}</select>
+        <button class="unl-cozy-upsell-add" name="action" value="add">+ ADD TO CART</button>
+      </form>
+    </div>
+  </div>
+</aside>}

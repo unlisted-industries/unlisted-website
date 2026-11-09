@@ -66,3 +66,20 @@ export async function getCollection(db, handle) {
 export async function lookupPage(db, handle, admin = false) {
   return db.prepare('SELECT * FROM pages WHERE handle = ?' + (admin ? '' : ' AND active = 1')).bind(handle).first();
 }
+
+export const cozyMatch = {
+  'cozy-hoodie-grey': 'cozy-straight-leg-sweats-grey',
+  'cozy-straight-leg-sweats-grey': 'cozy-hoodie-grey',
+};
+
+export async function searchProducts(db, terms) {
+  const words = terms.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const rows = await all(db.prepare(`
+    SELECT ${details} FROM products p WHERE p.status = 'active'
+    AND NOT EXISTS (
+      SELECT 1 FROM json_each(?) keyword WHERE instr(lower(p.title || ' ' || p.category), keyword.value) = 0
+    ) ORDER BY p.position, p.handle LIMIT 24
+  `).bind(JSON.stringify(words)));
+  return rows.map((row) => parseProduct(row));
+}
