@@ -65,7 +65,8 @@ export async function requestLogin(env, context, purpose, email) {
   await env.DB.prepare('INSERT INTO login_tokens (digest, email, purpose, expires_at) VALUES (?, ?, ?, ?)')
     .bind(digest, email, purpose, unixNow() + loginWindow).run();
   const url = new URL(accounts[purpose].returnTo + '/verify', context.url.origin);
-  url.searchParams.set('token', raw);
+  if (purpose === 'admin') url.hash = new URLSearchParams({ token: raw }).toString();
+  else url.searchParams.set('token', raw);
   const sent = await sendEmail(env, {
     to: email,
     subject: 'Your UNLISTED™ sign-in link',

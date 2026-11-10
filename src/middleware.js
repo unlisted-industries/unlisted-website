@@ -31,7 +31,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const response = await next();
   const headers = new Headers(response.headers);
   headers.set('X-Content-Type-Options', 'nosniff');
-  headers.set('Referrer-Policy', 'no-referrer');
+  // Preserve Origin on form submissions while keeping paths and query strings out of Referer.
+  headers.set('Referrer-Policy', 'strict-origin');
   headers.set('X-Frame-Options', 'DENY');
   headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (headers.get('Content-Type')?.includes('text/html')) {

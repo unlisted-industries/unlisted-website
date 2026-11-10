@@ -3,14 +3,12 @@ import Notice from './Notice.astro';
 const { purpose, ready, confirm = false } = Astro.props;
 const path = purpose === 'admin' ? '/admin' : '/account';
 const token = Astro.url.searchParams.get('token')?.slice(0, 64);
-const ownerActivation = confirm && purpose === 'admin' && !token;
 ---
 <Notice success={Astro.url.searchParams.has('sent') ? 'If the address is eligible, a sign-in link will arrive shortly.' : null} />
-{confirm ? <form method="post" action={path + '/session'} class="form" data-owner-activation={ownerActivation ? '' : undefined}>
+{confirm ? <form method="post" action={path + '/session'} class="form">
   <input type="hidden" name="action" value="confirm" />
   <input type="hidden" name="token" value={token} />
-  <button class="btn" type="submit" disabled={ownerActivation}>SIGN IN</button>
-  {ownerActivation && <p class="muted" data-activation-help hidden>Open the private owner access link to continue.</p>}
+  <button class="btn" type="submit">SIGN IN</button>
 </form> : ready ? <form method="post" action={path + '/session'} class="form">
   <input type="hidden" name="action" value="request" />
   <label>Email address <input name="email" type="email" autocomplete="email" maxlength="254" required /></label>

@@ -23,13 +23,12 @@ for (const field of document.querySelectorAll('[data-rich-text]')) {
 
 const activation = document.querySelector('[data-owner-activation]');
 if (activation) {
-  const token = new URLSearchParams(location.hash.slice(1)).get('token') ?? '';
+  const field = activation.elements.namedItem('token');
+  const token = field.value || new URLSearchParams(location.hash.slice(1)).get('token') || '';
   if (/^[0-9a-f]{64}$/.test(token)) {
-    activation.elements.namedItem('token').value = token;
+    field.value = token;
     activation.querySelector('button').disabled = false;
-    history.replaceState(null, '', location.pathname + location.search);
-  } else {
-    activation.querySelector('[data-activation-help]').hidden = false;
+    activation.querySelector('[data-activation-help]').hidden = true;
   }
 }
 

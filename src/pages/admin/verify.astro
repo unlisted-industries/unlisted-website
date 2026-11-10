@@ -1,7 +1,28 @@
 ---
+import { env } from 'cloudflare:workers';
 import Admin from '../../layouts/Admin.astro';
-import SignIn from '../../components/SignIn.astro';
+import Notice from '../../components/Notice.astro';
+import OwnerPasswordForm from '../../components/admin/OwnerPasswordForm.astro';
+import { currentUser } from '../../lib/auth.js';
+import { passwordRecord, passwordsReady } from '../../lib/admin-password.js';
+import { isToken, unixNow } from '../../lib/db.js';
+
+const ready = passwordsReady(env, Astro.url);
+const user = ready ? await currentUser(env, Astro, 'admin') : null;
+if (user && (user.password_change_until > unixNow() || !await passwordRecord(env.DB, user.email))) {
+  return Astro.redirect('/admin/password', 303);
+}
+const queryToken = Astro.url.searchParams.get('token');
 ---
-<Admin title="Confirm owner sign-in">
-  <div class="panel"><h1>Confirm owner sign-in</h1><SignIn purpose="admin" confirm /></div>
+<Admin title="Set your password">
+  <div class="panel">
+    <p class="overline">OWNER ACCESS</p>
+    <h1>Set your password</h1>
+    <Notice />
+    {ready ? <>
+      <p>Choose a password with 15 to 128 characters.</p>
+      <OwnerPasswordForm setup token={isToken(queryToken, 32) ? queryToken : ''} />
+    </> : <p>Owner password setup is unavailable on this address.</p>}
+    <p><a href="/admin/login">Already have a password? Sign in</a></p>
+  </div>
 </Admin>

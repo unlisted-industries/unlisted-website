@@ -12,7 +12,7 @@ const askEmail = adminEmails(env).length > 1;
   <div class="panel">
     <p class="overline">STORE MANAGEMENT</p>
     <h1>Owner sign-in</h1>
-    <Notice />
+    <Notice success={Astro.url.searchParams.has('password-set') ? 'Password saved. Sign in with your new password.' : null} />
     {ready ? <>
       <form method="post" action="/admin/session" class="form">
         <input type="hidden" name="action" value="password" />

@@ -115,16 +115,22 @@ test('owner sign-in is allowlisted and link consumption is single-use', async ()
   admin = browser();
   await admin('/admin/session', { action: 'request', email: owner });
   assert.equal(mail.length, 1);
-  const token = /token=([a-f0-9]{64})/.exec(mail[0].text)[1];
-  assert.equal((await admin('/admin/verify?token=' + token)).status, 200);
-  assert.equal((await admin('/admin/session', { action: 'confirm', token })).headers.get('Location'), '/admin/password');
-  assert.match((await outsider('/admin/session', { action: 'confirm', token })).headers.get('Location'), /expired/);
-  assert.match(await (await admin('/admin/password')).text(), /Set your password/);
-  const choose = { action: 'save-password', password: ownerPassword, password_confirmation: ownerPassword };
-  assert.match((await outsider('/admin/session', choose)).headers.get('Location'), /Sign\+in\+to\+set/);
-  assert.match((await admin('/admin/session', { ...choose, password_confirmation: 'fixture-password-mismatch' }))
-    .headers.get('Location'), /same\+new\+password/);
-  assert.equal((await admin('/admin/session', choose)).headers.get('Location'), '/admin?saved=1');
+  const token = /\/admin\/verify#token=([a-f0-9]{64})/.exec(mail[0].text)[1];
+  const setupResponse = await admin('/admin/verify');
+  assert.equal(setupResponse.headers.get('Referrer-Policy'), 'strict-origin');
+  const setupPage = await setupResponse.text();
+  assert.match(setupPage, /Set your password/);
+  assert.match(setupPage, /name="password" type="password"/);
+  assert.match(setupPage, /name="password_confirmation" type="password"/);
+  assert.match(await (await admin('/admin/verify?token=' + token)).text(), new RegExp('name="token" value="' + token + '"'));
+  const choose = { action: 'setup-password', token, password: ownerPassword, password_confirmation: ownerPassword };
+  const mismatch = await admin('/admin/session', { ...choose, password_confirmation: 'fixture-password-mismatch' });
+  assert.match(mismatch.headers.get('Location'), /same\+new\+password/);
+  assert.ok(mismatch.headers.get('Location').endsWith('#token=' + token));
+  assert.equal((await admin('/admin/session', choose)).headers.get('Location'), '/admin/login?password-set=1');
+  assert.match((await outsider('/admin/session', choose)).headers.get('Location'), /expired/);
+  assert.equal((await admin('/admin')).headers.get('Location'), '/admin/login');
+  assert.equal((await admin('/admin/session', { action: 'password', password: ownerPassword })).headers.get('Location'), '/admin');
   const migration = await readFile(new URL('../migrations/' + ownerSchema, import.meta.url), 'utf8');
   await db.batch(unstable_splitSqlQuery(migration).map((query) => db.prepare(query)));
   assert.equal(await db.prepare('SELECT count(*) AS count FROM admin_passwords').first('count'), 1);
@@ -352,6 +358,7 @@ test('owner password sign-in, password changes, and private recovery keep admin 
   const recoveryToken = /token=([a-f0-9]{64})/.exec(mail.at(-1).text)[1];
   assert.equal((await recovery('/admin/session', { action: 'confirm', token: recoveryToken }))
     .headers.get('Location'), '/admin/password');
+  assert.equal((await recovery('/admin/verify')).headers.get('Location'), '/admin/password');
   assert.doesNotMatch(await (await recovery('/admin/password')).text(), /Current password/);
   assert.equal((await recovery('/admin/session', {
     action: 'save-password', password: ownerPassword, password_confirmation: ownerPassword,

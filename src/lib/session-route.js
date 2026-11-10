@@ -1,5 +1,6 @@
 import { confirmLogin, logout, requestLogin } from './auth.js';
-import { passwordsReady, saveOwnerPassword, signInWithPassword } from './admin-password.js';
+import { passwordsReady, saveOwnerPassword, setupOwnerPassword, signInWithPassword } from './admin-password.js';
+import { isToken } from './db.js';
 import { emailValue, formData, formError, seeOther, StoreError, textValue } from './http.js';
 
 export async function sessionPost(env, context, purpose) {
@@ -15,6 +16,12 @@ export async function sessionPost(env, context, purpose) {
       destination = '/admin/password';
       await saveOwnerPassword(env, context, form);
       return seeOther('/admin?saved=1');
+    }
+    if (purpose === 'admin' && form.get('action') === 'setup-password') {
+      const token = form.get('token');
+      destination = isToken(token, 32) ? '/admin/verify#token=' + token : '/admin/verify';
+      await setupOwnerPassword(env, context, form, token);
+      return seeOther('/admin/login?password-set=1');
     }
     switch (form.get('action')) {
       case 'confirm': {
