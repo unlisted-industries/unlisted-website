@@ -6,11 +6,11 @@ const paymobNames = ['PAYMOB_SECRET_KEY', 'PAYMOB_PUBLIC_KEY', 'PAYMOB_HMAC_SECR
 async function attachPaymobTestSecrets(config, env) {
   const missing = paymobNames.filter((name) => !env[name]?.trim());
   if (missing.length) return 'Build settings missing ' + missing.join(', ');
-  if (!/^(?:egypt_)?sktest[_-]/i.test(env.PAYMOB_SECRET_KEY.trim()) ||
-      !/^(?:egypt_)?pktest[_-]/i.test(env.PAYMOB_PUBLIC_KEY.trim()) ||
-      !/^\s*[1-9]\d*(\s*,\s*[1-9]\d*)*\s*$/.test(env.PAYMOB_INTEGRATION_IDS)) {
-    return 'Build settings need Paymob Test keys and a numeric Card Integration ID.';
-  }
+  const invalid = [];
+  if (!/^(?:egypt_)?sk_?test[_-]/i.test(env.PAYMOB_SECRET_KEY.trim())) invalid.push('PAYMOB_SECRET_KEY (Test Secret Key)');
+  if (!/^(?:egypt_)?pk_?test[_-]/i.test(env.PAYMOB_PUBLIC_KEY.trim())) invalid.push('PAYMOB_PUBLIC_KEY (Test Public Key)');
+  if (!/^\s*[1-9]\d*(\s*,\s*[1-9]\d*)*\s*$/.test(env.PAYMOB_INTEGRATION_IDS)) invalid.push('PAYMOB_INTEGRATION_IDS (numeric Card Integration ID)');
+  if (invalid.length) return 'Check these Build settings: ' + invalid.join(', ');
   if (!env.CLOUDFLARE_API_TOKEN) return 'This build cannot edit runtime settings.';
 
   const url = 'https://api.cloudflare.com/client/v4/accounts/' + config.account_id + '/workers/scripts/' + config.name;
