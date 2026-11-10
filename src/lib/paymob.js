@@ -31,7 +31,7 @@ export function cardReady(env) {
   return paymentConfigurationIssues(env).length === 0;
 }
 
-export async function createPaymobIntention(env, order, remaining) {
+async function createPaymobIntention(env, order, remaining, callbacks = {}) {
   const [first, ...last] = order.name.trim().split(/\s+/);
   const response = await fetch(gateway + '/v1/intention/', {
     method: 'POST',
@@ -49,8 +49,8 @@ export async function createPaymobIntention(env, order, remaining) {
       },
       special_reference: order.id,
       expiration: remaining,
-      notification_url: paymentOrigin(env) + '/api/paymob',
-      redirection_url: paymentOrigin(env) + '/api/payment-return?order=' + order.id,
+      notification_url: paymentOrigin(env) + (callbacks.notification ?? '/api/paymob'),
+      redirection_url: paymentOrigin(env) + (callbacks.redirect ?? '/api/payment-return?order=' + order.id),
     }),
   });
   if (!response.ok) throw new StoreError('Paymob rejected the payment request.', response.status);
@@ -59,6 +59,29 @@ export async function createPaymobIntention(env, order, remaining) {
     throw new Error('Intention response incomplete');
   }
   return result;
+}
+
+function hostedCheckout(env, intention) {
+  const url = new URL('/unifiedcheckout/', gateway);
+  url.searchParams.set('publicKey', env.PAYMOB_PUBLIC_KEY);
+  url.searchParams.set('clientSecret', intention.client_secret);
+  return url.href;
+}
+
+export function sandboxReady(env, origin) {
+  return cardReady(env) && origin === env.PREVIEW_PAYMENT_ORIGIN && origin === paymentOrigin(env) &&
+    /^(?:egy(?:pt)?_)?sk_?test[_-]/i.test(env.PAYMOB_SECRET_KEY) && /^(?:egy(?:pt)?_)?pk_?test[_-]/i.test(env.PAYMOB_PUBLIC_KEY);
+}
+
+export async function createSandboxCheckout(env, id) {
+  const intention = await createPaymobIntention(env, {
+    id, total: 1000, currency: 'EGP', name: 'UNLISTED Sandbox', address: 'Sandbox address',
+    phone: '01010101010', email: 'unlisted-sandbox@example.com', city: 'Cairo', shipping_label: 'Cairo',
+  }, 900, { notification: '/api/paymob?sandbox=' + id, redirect: '/admin/paymob-test?run=' + id });
+  if (!/^pi_test_/.test(intention.id) || !/(^|_)csk_test_/.test(intention.client_secret)) {
+    throw new StoreError('Paymob did not return a sandbox checkout.', 502);
+  }
+  return { providerOrder: String(intention.intention_order_id), checkout: hostedCheckout(env, intention) };
 }
 
 export async function startPayment(env, order) {
@@ -77,14 +100,12 @@ export async function startPayment(env, order) {
   }
   try {
     const result = await createPaymobIntention(env, order, remaining);
-    const url = new URL('/unifiedcheckout/', gateway);
-    url.searchParams.set('publicKey', env.PAYMOB_PUBLIC_KEY);
-    url.searchParams.set('clientSecret', result.client_secret);
+    const checkout = hostedCheckout(env, result);
     const saved = await env.DB.prepare(`UPDATE orders SET checkout_url = ?, provider_order_id = ?, payment_lock_until = NULL
       WHERE id = ? AND payment_lock_until = ? AND payment_status = 'pending' AND status = 'new'`)
-      .bind(url.href, String(result.intention_order_id), order.id, lock.payment_lock_until).run();
+      .bind(checkout, String(result.intention_order_id), order.id, lock.payment_lock_until).run();
     if (saved.meta.changes !== 1) throw new Error('Order changed during payment initialization');
-    return url.href;
+    return checkout;
   } catch {
     await env.DB.prepare('UPDATE orders SET payment_lock_until = NULL WHERE id = ? AND payment_lock_until = ?')
       .bind(order.id, lock.payment_lock_until).run();

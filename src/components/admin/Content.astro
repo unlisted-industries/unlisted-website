@@ -2,7 +2,7 @@
 import { env } from 'cloudflare:workers';
 import { all } from '../../lib/db.js';
 import { getSettings, lookupPage } from '../../lib/catalog.js';
-import { paymentConfigurationIssues, paymentOrigin } from '../../lib/paymob.js';
+import { paymentConfigurationIssues, paymentOrigin, sandboxReady } from '../../lib/paymob.js';
 import { emailReady } from '../../lib/auth.js';
 import { mediaUrl } from '../../lib/content.js';
 import { queryOffset } from '../../lib/admin.js';
@@ -117,7 +117,7 @@ const paymentIssues = store ? paymentConfigurationIssues(env) : [];
       <p class="muted">These settings are missing or invalid in the deployed Worker. Open Cloudflare → unlisted-website → Settings → Variables and Secrets.</p>
       <ul>{paymentIssues.map((name) => <li><code>{name}</code></li>)}</ul>
     </div>}
-    {env.PREVIEW_PAYMOB_BUILD_STATUS && <p class="muted">{env.PREVIEW_PAYMOB_BUILD_STATUS}</p>}
+    {sandboxReady(env, Astro.url.origin) && <p><a href="/admin/paymob-test">Test Paymob checkout</a></p>}
   </section>
   <button class="button primary">Save settings</button>
 </form>}

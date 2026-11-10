@@ -11,7 +11,7 @@ const origin = 'https://unlisted.test';
 const secret = 'local-test-hmac';
 const owner = 'owner@example.invalid';
 const ownerPassword = 'fixture-owner-password-one';
-const runtimeSchemas = new Set(['0006_owner_passwords.sql', '0007_order_returns.sql', '0008_shopify_import.sql']);
+const runtimeSchemas = new Set(['0006_owner_passwords.sql', '0007_order_returns.sql', '0008_shopify_import.sql', '0009_paymob_sandbox.sql']);
 const mail = [];
 const intents = [];
 let runtime, db, admin;
@@ -54,8 +54,8 @@ before(async () => {
     ...workerOptions, modules, modulesRoot: root, d1Persist: false, r2Persist: false,
     bindings: {
       CHECKOUT_ENABLED: 'true', ADMIN_EMAILS: owner, ADMIN_ORIGIN: origin, EMAIL_FROM: 'UNLISTED <sender@example.invalid>',
-      RESEND_API_KEY: 'test-email-key', PAYMOB_SECRET_KEY: 'test-paymob-secret', PAYMOB_PUBLIC_KEY: 'test-paymob-public',
-      PAYMOB_INTEGRATION_IDS: '101', PAYMOB_HMAC_SECRET: secret, PAYMENT_ORIGIN: origin,
+      RESEND_API_KEY: 'test-email-key', PAYMOB_SECRET_KEY: 'sk_test_fixture', PAYMOB_PUBLIC_KEY: 'pk_test_fixture',
+      PAYMOB_INTEGRATION_IDS: '101', PAYMOB_HMAC_SECRET: secret, PAYMENT_ORIGIN: origin, PREVIEW_PAYMENT_ORIGIN: origin,
     },
     async outboundService(request) {
       const url = new URL(request.url);
@@ -65,7 +65,7 @@ before(async () => {
       }
       if (url.href === 'https://accept.paymob.com/v1/intention/') {
         intents.push(await request.json());
-        return Response.json({ intention_order_id: 8000 + intents.length, client_secret: 'sandbox-order-' + intents.length }, { status: 201 });
+        return Response.json({ id: 'pi_test_fixture', intention_order_id: 8000 + intents.length, client_secret: 'csk_test_fixture' }, { status: 201 });
       }
       throw new Error('Unexpected external call to ' + url.origin);
     },
@@ -235,6 +235,23 @@ test('Paymob starts hosted checkout and only a matching signed capture can mark 
   assert.match(await (await admin('/admin/finance')).text(), /<strong>680 EGP<\/strong>/);
   assert.equal(await db.prepare('SELECT count(*) AS total FROM payment_events').first('total'), 1);
   assert.equal(mail.filter((message) => message.to[0] === 'cardbuyer@example.invalid').length, 1);
+
+  const sandboxPage = '/admin/paymob-test';
+  assert.equal((await browser()(sandboxPage, {})).headers.get('Location'), '/admin/login');
+  assert.doesNotMatch((await admin(sandboxPage, {}, { Origin: 'https://other.invalid' })).headers.get('Location') ?? '', /accept\.paymob/);
+  const orderCount = await db.prepare('SELECT count(*) AS total FROM orders').first('total');
+  assert.match((await admin(sandboxPage, {})).headers.get('Location'), /^https:\/\/accept\.paymob\.com\/unifiedcheckout\//);
+  const testIntent = intents.at(-1);
+  const testCallback = new URL(testIntent.notification_url);
+  const testStatus = new URL(testIntent.redirection_url);
+  const sandboxTransaction = { ...transaction, id: 602, amount_cents: 1000, order: { id: 8002 } };
+  testCallback.searchParams.set('hmac', signature(sandboxTransaction));
+  const sandboxEvent = { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'TRANSACTION', obj: sandboxTransaction }) };
+  assert.equal((await runtime.dispatchFetch(testCallback.href, sandboxEvent)).status, 204);
+  assert.equal((await runtime.dispatchFetch(testCallback.href, sandboxEvent)).status, 204);
+  assert.match(await (await admin(testStatus.pathname + testStatus.search)).text(), /Sandbox payment confirmed/);
+  assert.equal(await db.prepare('SELECT count(*) AS total FROM orders').first('total'), orderCount);
 });
 
 test('account sign-in authorizes order history by verified email and rejects cross-site forms', async () => {
