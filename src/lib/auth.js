@@ -7,8 +7,12 @@ const accounts = {
   admin: { cookie: 'unlisted_admin', path: '/admin', age: 12 * 3600, returnTo: '/admin' },
 };
 
+export function adminEmails(env) {
+  return [...new Set((env.ADMIN_EMAILS ?? '').split(',').map((value) => value.trim().toLowerCase()).filter(Boolean))];
+}
+
 export function canAdmin(env, email) {
-  return (env.ADMIN_EMAILS ?? '').split(',').some((value) => value.trim().toLowerCase() === email);
+  return adminEmails(env).includes(email);
 }
 
 export function emailReady(env) {
@@ -88,10 +92,10 @@ export async function confirmLogin(env, context, purpose, raw) {
     [`INSERT INTO customers (id, email)
       SELECT ?, email FROM login_tokens WHERE digest = ? AND purpose = ? AND expires_at > unixepoch()
       ON CONFLICT (email) DO NOTHING`, makeToken(), digest, purpose],
-    [`INSERT INTO sessions (digest, customer_id, purpose, expires_at)
-      SELECT ?, c.id, t.purpose, ? FROM login_tokens t JOIN customers c ON c.email = t.email
+    [`INSERT INTO sessions (digest, customer_id, purpose, expires_at, password_change_until)
+      SELECT ?, c.id, t.purpose, ?, ? FROM login_tokens t JOIN customers c ON c.email = t.email
       WHERE t.digest = ? AND t.purpose = ? AND t.expires_at > unixepoch()`,
-    sessionDigest, unixNow() + settings.age, digest, purpose],
+    sessionDigest, unixNow() + settings.age, purpose === 'admin' ? unixNow() + loginWindow : 0, digest, purpose],
     ['DELETE FROM login_tokens WHERE digest = ? AND purpose = ?', digest, purpose],
     ['DELETE FROM sessions WHERE digest = ? AND purpose = ?', oldDigest, purpose],
   ]);
@@ -103,23 +107,27 @@ export async function confirmLogin(env, context, purpose, raw) {
 export async function currentUser(env, context, purpose = 'account') {
   const raw = context.cookies.get(accounts[purpose].cookie)?.value;
   if (!isToken(raw, 32)) return null;
-  const user = await env.DB.prepare(`SELECT c.id, c.name, c.email FROM sessions s JOIN customers c ON c.id = s.customer_id
+  const user = await env.DB.prepare(`SELECT c.id, c.name, c.email, s.password_change_until FROM sessions s JOIN customers c ON c.id = s.customer_id
     WHERE s.digest = ? AND s.purpose = ? AND s.expires_at > unixepoch()`)
     .bind(await sha256(raw), purpose).first();
   return user && (purpose !== 'admin' || canAdmin(env, user.email)) ? user : null;
 }
 
-export async function openAdminSession(env, context, user) {
+export async function openAdminSession(env, context, user, passwordHash) {
   if (!canAdmin(env, user.email)) throw new StoreError('Owner sign-in is unavailable.', 403);
   const { cookie, path, age } = accounts.admin;
   const raw = makeToken(32);
   const current = context.cookies.get(cookie)?.value;
   const previous = isToken(current, 32) ? await sha256(current) : '';
-  await statements(env.DB, [
-    ["INSERT INTO sessions (digest, customer_id, purpose, expires_at) VALUES (?, ?, 'admin', ?)",
-      await sha256(raw), user.id, unixNow() + age],
-    ["DELETE FROM sessions WHERE digest = ? AND purpose = 'admin'", previous],
+  const digest = await sha256(raw);
+  const [session] = await statements(env.DB, [
+    [`INSERT INTO sessions (digest, customer_id, purpose, expires_at)
+      SELECT ?, customer_id, 'admin', ? FROM admin_passwords WHERE customer_id = ? AND password_hash = ?`,
+    digest, unixNow() + age, user.id, passwordHash],
+    [`DELETE FROM sessions WHERE digest = ? AND purpose = 'admin'
+      AND EXISTS (SELECT 1 FROM sessions WHERE digest = ?)`, previous, digest],
   ]);
+  if (session.meta.changes !== 1) throw new StoreError('The password changed. Try signing in again.', 409);
   setCookie(context, cookie, raw, age, path);
 }
 

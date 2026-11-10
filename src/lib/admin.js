@@ -14,6 +14,13 @@ export function queryOffset(url) {
   return Math.max(0, Math.min(10000, Number.parseInt(url.searchParams.get('offset') ?? '0', 10) || 0));
 }
 
+export const reportingPeriods = [7, 30, 90];
+
+export function reportDays(url) {
+  const selected = Number(url.searchParams.get('days'));
+  return reportingPeriods.includes(selected) ? selected : 30;
+}
+
 function path(area, key, value) {
   return '/admin/' + area + (key && value ? '?' + new URLSearchParams({ [key]: value }) : '');
 }

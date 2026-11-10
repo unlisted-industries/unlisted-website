@@ -5,16 +5,28 @@ import Products from '../../components/admin/Products.astro';
 import Content from '../../components/admin/Content.astro';
 import Orders from '../../components/admin/Orders.astro';
 import StoreControls from '../../components/admin/StoreControls.astro';
+import StoreOverview from '../../components/admin/StoreOverview.astro';
+import Business from '../../components/admin/Business.astro';
+import Inventory from '../../components/admin/Inventory.astro';
+import OnlineStore from '../../components/admin/OnlineStore.astro';
 import { currentUser } from '../../lib/auth.js';
 import { adminSections } from '../../lib/admin.js';
+import { workspaceSections } from '../../lib/admin-navigation.js';
 const user = await currentUser(env, Astro, 'admin');
 if (!user) return Astro.redirect('/admin/login', 303);
 const section = Astro.params.section;
-const label = adminSections.find(([key]) => key === section)?.[1];
+const workspace = workspaceSections.find(({ key }) => key === section);
+const label = workspace?.label ?? [
+  ...adminSections, ['inventory', 'Inventory'], ['analytics', 'Analytics'], ['online-store', 'Online Store'],
+].find(([key]) => key === section)?.[1];
 if (!label) Astro.response.status = 404;
 ---
-<Admin title={label ?? 'Page not found'} section={section} user={user}>
+<Admin title={label ?? 'Page not found'} user={user}>
   {!label ? <h1>Page not found</h1>
+    : section === 'website' || section === 'analytics' ? <StoreOverview view={section} />
+    : workspace ? <Business section={section} title={label} />
+    : section === 'inventory' ? <Inventory />
+    : section === 'online-store' ? <OnlineStore />
     : section === 'products' || section === 'collections' ? <Products section={section} />
     : section === 'orders' || section === 'customers' || section === 'inbox' ? <Orders section={section} />
     : section === 'content' || section === 'media' || section === 'settings' ? <Content section={section} />

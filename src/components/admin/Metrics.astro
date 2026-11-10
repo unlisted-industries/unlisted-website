@@ -1,0 +1,6 @@
+---
+const { cards } = Astro.props;
+---
+<div class="metric-grid">
+  {cards.map(([label, value, description]) => <article class="panel metric"><span>{label}</span><strong>{value}</strong><small>{description}</small></article>)}
+</div>

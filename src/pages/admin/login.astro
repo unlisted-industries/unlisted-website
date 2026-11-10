@@ -1,22 +1,26 @@
 ---
 import { env } from 'cloudflare:workers';
 import Admin from '../../layouts/Admin.astro';
-import AdminPasskey from '../../components/AdminPasskey.astro';
 import Notice from '../../components/Notice.astro';
-import SignIn from '../../components/SignIn.astro';
-import { currentUser, emailReady } from '../../lib/auth.js';
-import { passkeysReady } from '../../lib/admin-passkeys.js';
+import { adminEmails, currentUser } from '../../lib/auth.js';
+import { passwordsReady } from '../../lib/admin-password.js';
 if (await currentUser(env, Astro, 'admin')) return Astro.redirect('/admin', 303);
-const passkey = passkeysReady(env, Astro.url);
-const email = emailReady(env) && Boolean(env.ADMIN_EMAILS);
+const ready = passwordsReady(env, Astro.url);
+const askEmail = adminEmails(env).length > 1;
 ---
 <Admin title="Owner sign-in">
   <div class="panel">
     <p class="overline">STORE MANAGEMENT</p>
     <h1>Owner sign-in</h1>
-    {passkey && <AdminPasskey mode="login" />}
-    {!passkey || email
-      ? <><p>Use your approved store email address.</p><SignIn purpose="admin" ready={email} /></>
-      : <><Notice /><p>Use the private owner access link the first time you sign in.</p></>}
+    <Notice />
+    {ready ? <>
+      <form method="post" action="/admin/session" class="form">
+        <input type="hidden" name="action" value="password" />
+        {askEmail && <label>Email address <input name="email" type="email" autocomplete="username" maxlength="254" required /></label>}
+        <label>Password <input name="password" type="password" autocomplete="current-password" maxlength="256" required /></label>
+        <button class="btn" type="submit">SIGN IN</button>
+      </form>
+      <p class="muted">Use your private owner link to set your password the first time.</p>
+    </> : <p>Owner sign-in is unavailable on this address.</p>}
   </div>
 </Admin>

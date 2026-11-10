@@ -1,7 +1,17 @@
 ---
-import { adminSections } from '../lib/admin.js';
+import { env } from 'cloudflare:workers';
 import Notice from '../components/Notice.astro';
-const { title, section, user } = Astro.props;
+import Icon from '../components/admin/Icon.astro';
+import { workspaceSections, websiteSections } from '../lib/admin-navigation.js';
+import { passwordsReady } from '../lib/admin-password.js';
+const { title, user } = Astro.props;
+const current = Astro.url.pathname.split('/')[2] || 'overview';
+const workspace = current === 'overview' || workspaceSections.some(({ key }) => key === current) ? current : 'website';
+const password = user && passwordsReady(env, Astro.url);
+const searchable = [
+  { key: '', label: 'Overview' }, ...workspaceSections,
+  ...websiteSections.flatMap(({ children = [], ...entry }) => [entry, ...children]),
+];
 ---
 <!doctype html>
 <html lang="en">
@@ -9,30 +19,71 @@ const { title, section, user } = Astro.props;
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex,nofollow" />
-  <title>{title} · UNLISTED Admin</title>
+  <meta name="theme-color" content="#161616" />
+  <title>{title} · UNLISTED Workspace</title>
+  <link rel="manifest" href="/admin/manifest.webmanifest" />
+  <link rel="icon" href="/admin/icon-192.png" />
+  <link rel="apple-touch-icon" href="/admin/icon-192.png" />
   <link rel="stylesheet" href="/admin/admin.css" />
   <script is:inline src="/admin/admin.js" defer></script>
 </head>
 <body class={user ? 'admin-app' : 'admin-signin'}>
   <header class="admin-header">
-    <a href={user ? '/admin' : '/'} class="admin-brand">UNLISTED<span>™</span> <small>ADMIN</small></a>
-    {user && <div class="admin-header-actions">
-      <a href="/" target="_blank" rel="noopener">View store ↗</a>
-      <form method="post" action="/admin/session"><input type="hidden" name="action" value="logout" /><button class="logout">Sign out</button></form>
-    </div>}
+    <div class="admin-header-brand">
+      {user && <button type="button" class="admin-menu" data-admin-menu aria-controls="admin-sidebar" aria-expanded="false" aria-label="Navigation" hidden><Icon name="menu" /></button>}
+      <a href="/admin" class="admin-brand">UNLISTED<span>™</span> <small>WORKSPACE</small></a>
+    </div>
+    {user && <>
+      <button type="button" class="admin-search" data-admin-search aria-label="Search workspace pages" aria-haspopup="dialog" hidden><Icon name="search" /> <span>Search workspace</span> <kbd>⌘ / Ctrl K</kbd></button>
+      <details class="admin-profile">
+        <summary aria-label="Owner menu"><span class="admin-avatar" aria-hidden="true">U</span><span class="admin-profile-label">UNLISTED</span></summary>
+        <div class="admin-profile-menu">
+          <small>{user.email}</small>
+          <a href="/" target="_blank" rel="noopener">View store ↗</a>
+          {password && <a href="/admin/password">Change password</a>}
+          <form method="post" action="/admin/session"><input type="hidden" name="action" value="logout" /><button type="submit">Sign out</button></form>
+        </div>
+      </details>
+    </>}
   </header>
   {user ? <div class="admin-shell">
-    <aside class="admin-sidebar">
-      <nav aria-label="Store admin">
-        <a href="/admin" aria-current={!section ? 'page' : undefined}>Overview</a>
-        {adminSections.map(([key, label]) => <a href={'/admin/' + key} aria-current={section === key ? 'page' : undefined}>{label}</a>)}
+    <aside class="admin-sidebar" id="admin-sidebar">
+      <nav aria-label="UNLISTED workspace">
+        <p class="admin-nav-heading">Workspace</p>
+        <ul class="admin-nav-list">
+          <li><a href="/admin" aria-current={current === 'overview' ? 'page' : undefined}><Icon name="overview" /> Overview</a></li>
+          {workspaceSections.map(({ key, label }) => <li>
+            <a href={'/admin/' + key} class:list={[workspace === key && 'section-active']} aria-current={current === key ? 'page' : undefined}><Icon name={key} /> {label}</a>
+          </li>)}
+        </ul>
+        {workspace === 'website' && <>
+          <p class="admin-nav-heading website-nav-heading">Website</p>
+          <ul class="admin-nav-list">
+            {websiteSections.map(({ key, label, children }) => <li>
+              <a href={'/admin/' + key} aria-current={current === key ? 'page' : undefined}><Icon name={key} /> {label}</a>
+              {children && <ul class="admin-nav-children">
+                {children.map(({ key, label }) => <li><a href={'/admin/' + key} aria-current={current === key ? 'page' : undefined}>{label}</a></li>)}
+              </ul>}
+            </li>)}
+          </ul>
+        </>}
       </nav>
-      <small class="admin-email">{user.email}</small>
     </aside>
     <main class="admin-main">
       <Notice success={Astro.url.searchParams.has('saved') ? 'Changes saved.' : null} />
       <slot />
     </main>
   </div> : <main class="admin-login"><slot /></main>}
+  {user && <dialog class="admin-search-dialog" aria-labelledby="admin-search-title" data-admin-search-dialog>
+    <div class="admin-search-heading">
+      <h2 id="admin-search-title">Search workspace</h2>
+      <form method="dialog"><button type="submit" aria-label="Close search"><Icon name="close" /></button></form>
+    </div>
+    <input type="search" aria-label="Search pages" placeholder="Find a page…" autocomplete="off" />
+    <ul class="admin-search-results">
+      {searchable.map(({ key, label }) => <li data-search-item><a href={key ? '/admin/' + key : '/admin'}>{label}</a></li>)}
+    </ul>
+    <p data-search-empty class="muted" role="status" hidden>No matching pages.</p>
+  </dialog>}
 </body>
 </html>

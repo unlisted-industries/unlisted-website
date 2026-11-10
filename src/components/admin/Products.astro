@@ -11,6 +11,7 @@ import Pagination from './Pagination.astro';
 const { section } = Astro.props;
 const isProduct = section === 'products';
 const handle = Astro.url.searchParams.get(isProduct ? 'product' : 'collection');
+const selectedVariant = Astro.url.searchParams.get('variant');
 const creating = Astro.url.searchParams.has('new');
 const offset = queryOffset(Astro.url);
 const q = (Astro.url.searchParams.get('q') ?? '').slice(0, 100);
@@ -86,7 +87,9 @@ const label = isProduct ? 'Product' : 'Collection';
   </section>
   {isProduct && record && <>
     <section class="panel"><h2>Variants and inventory</h2><p class="muted">Enter verified stock on hand for each size. Checkout reserves inventory automatically.</p>
-      {record.variants.map((variant) => <details class="admin-detail"><summary>{variant.title} · {variant.inventory ?? 'Stock unverified'}</summary><Variant handle={handle} variant={variant} /></details>)}
+      {record.variants.map((variant) => <details class="admin-detail" id={'variant-' + variant.id} open={selectedVariant === variant.id}>
+        <summary>{variant.title} · {variant.inventory ?? 'Stock unverified'}</summary><Variant handle={handle} variant={variant} />
+      </details>)}
       <details class="admin-detail"><summary>Add a variant</summary><Variant handle={handle} /></details>
     </section>
     <section class="panel"><h2>Product media</h2>

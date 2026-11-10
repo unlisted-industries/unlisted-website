@@ -1,0 +1,29 @@
+---
+import { env } from 'cloudflare:workers';
+import { queryOffset } from '../../lib/admin.js';
+import { all } from '../../lib/db.js';
+import Pagination from './Pagination.astro';
+const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 100);
+const offset = queryOffset(Astro.url);
+const rows = await all(env.DB.prepare(`SELECT p.handle, p.title AS product, p.status, v.id, v.title AS variant, v.sku, v.inventory
+  FROM variants v JOIN products p ON p.id = v.product_id
+  WHERE v.active = 1 AND p.status <> 'archived'
+    AND instr(lower(p.title || ' ' || v.title || ' ' || v.sku), lower(?)) > 0
+  ORDER BY p.title COLLATE NOCASE, p.handle, v.position, v.id LIMIT 26 OFFSET ?`).bind(q, offset));
+function variantPath(row) {
+  const query = new URLSearchParams({ product: row.handle, variant: row.id });
+  return '/admin/products?' + query + '#variant-' + encodeURIComponent(row.id);
+}
+---
+<div class="admin-heading"><div><p class="overline">CATALOG</p><h1>Inventory</h1><p>Review stock on hand by variant. Select a product to update its count.</p></div></div>
+<section class="panel">
+  <form method="get" class="inline-form"><label>Search <input name="q" value={q} maxlength="100" placeholder="Product, variant, or SKU" /></label><button class="button">Search</button></form>
+  {rows.length ? <div class="table-wrap"><table>
+    <thead><tr><th>Product</th><th>Variant</th><th>SKU</th><th>Status</th><th>Stock on hand</th></tr></thead>
+    <tbody>{rows.slice(0, 25).map((row) => <tr>
+      <td><a href={variantPath(row)}>{row.product}</a></td><td>{row.variant}</td><td>{row.sku || '—'}</td>
+      <td><span class="pill">{row.status}</span></td><td>{row.inventory ?? 'Unverified'}</td>
+    </tr>)}</tbody>
+  </table></div> : <p class="muted">No variants found.</p>}
+  <Pagination offset={offset} more={rows.length > 25} />
+</section>

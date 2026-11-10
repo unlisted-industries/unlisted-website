@@ -32,3 +32,49 @@ if (activation) {
     activation.querySelector('[data-activation-help]').hidden = false;
   }
 }
+
+const menu = document.querySelector('[data-admin-menu]');
+if (menu) {
+  menu.hidden = false;
+  const isOpen = () => menu.getAttribute('aria-expanded') === 'true';
+  menu.addEventListener('click', () => menu.setAttribute('aria-expanded', String(!isOpen())));
+  const sidebar = document.getElementById(menu.getAttribute('aria-controls'));
+  sidebar.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && isOpen()) {
+      menu.setAttribute('aria-expanded', 'false');
+      menu.focus();
+    }
+  });
+}
+
+const search = document.querySelector('[data-admin-search]');
+const dialog = document.querySelector('[data-admin-search-dialog]');
+if (search && typeof dialog?.showModal === 'function') {
+  const input = dialog.querySelector('input');
+  const items = [...dialog.querySelectorAll('[data-search-item]')];
+  const empty = dialog.querySelector('[data-search-empty]');
+  function filterPages() {
+    const query = input.value.trim().toLowerCase();
+    for (const item of items) item.hidden = !item.textContent.toLowerCase().includes(query);
+    empty.hidden = items.some((item) => !item.hidden);
+  }
+  function openSearch() {
+    if (dialog.open) return;
+    input.value = '';
+    filterPages();
+    dialog.showModal();
+    input.focus();
+  }
+  search.hidden = false;
+  search.addEventListener('click', openSearch);
+  input.addEventListener('input', filterPages);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') items.find((item) => !item.hidden)?.querySelector('a').click();
+  });
+  document.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+      event.preventDefault();
+      openSearch();
+    }
+  });
+}
