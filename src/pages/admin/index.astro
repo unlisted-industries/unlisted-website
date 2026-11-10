@@ -1,7 +1,7 @@
 ---
 import { env } from 'cloudflare:workers';
 import Admin from '../../layouts/Admin.astro';
-import StoreOverview from '../../components/admin/StoreOverview.astro';
+import WorkspaceHome from '../../components/admin/WorkspaceHome.astro';
 import { passwordRecord, passwordsReady } from '../../lib/admin-password.js';
 import { currentUser } from '../../lib/auth.js';
 
@@ -11,5 +11,5 @@ const password = passwordsReady(env, Astro.url);
 if (password && !await passwordRecord(env.DB, user.email)) return Astro.redirect('/admin/password', 303);
 ---
 <Admin title="Overview" user={user}>
-  <StoreOverview view="overview" password={password} />
+  <WorkspaceHome />
 </Admin>

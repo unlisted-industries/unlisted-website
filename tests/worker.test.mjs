@@ -11,7 +11,7 @@ const origin = 'https://unlisted.test';
 const secret = 'local-test-hmac';
 const owner = 'owner@example.invalid';
 const ownerPassword = 'fixture-owner-password-one';
-const ownerSchema = '0006_owner_passwords.sql';
+const runtimeSchemas = new Set(['0006_owner_passwords.sql', '0007_order_returns.sql', '0008_shopify_import.sql']);
 const mail = [];
 const intents = [];
 let runtime, db, admin;
@@ -72,8 +72,8 @@ before(async () => {
   }));
   db = await runtime.getD1Database('DB');
   const migrations = (await readdir(new URL('../migrations/', import.meta.url))).filter((name) => name.endsWith('.sql')).sort();
-  // Model the hosted store before its first password release.
-  for (const name of migrations.filter((file) => file !== ownerSchema)) {
+  // Model the existing hosted database before the Worker initializes its new tables.
+  for (const name of migrations.filter((file) => !runtimeSchemas.has(file))) {
     const migration = await readFile(new URL('../migrations/' + name, import.meta.url), 'utf8');
     await db.batch(unstable_splitSqlQuery(migration).map((query) => db.prepare(query)));
   }
@@ -88,9 +88,9 @@ before(async () => {
 
 after(async () => { if (runtime) await runtime.dispose(); });
 
-async function customerCheckout(web, email, method = 'cod', coupon = 'COZY10') {
+async function customerCheckout(web, email, method = 'cod', coupon = 'COZY10', quantity = 1) {
   assert.equal((await web('/')).status, 200);
-  assert.equal((await web('/api/cart', { variant: 'v', quantity: 1, action: 'add' })).headers.get('Location'), '/cart');
+  assert.equal((await web('/api/cart', { variant: 'v', quantity, action: 'add' })).headers.get('Location'), '/cart');
   const input = { name: 'Test Buyer', email, phone: '01000000000', address: 'Test address',
     city: 'Test city', governorate: 'cairo', discount: coupon, payment_method: method };
   const review = await web('/checkout', input);
@@ -99,7 +99,7 @@ async function customerCheckout(web, email, method = 'cod', coupon = 'COZY10') {
   assert.match(html, /REVIEW YOUR ORDER/);
   const field = (name) => new RegExp('name="' + name + '" value="([^"]*)"').exec(html)?.[1];
   const request = { ...input, cart_version: field('cart_version'), checkout_key: field('checkout_key'), quoted_total: field('quoted_total') };
-  assert.equal(request.quoted_total, coupon ? '62000' : '68000');
+  assert.equal(request.quoted_total, String(quantity * (coupon ? 54000 : 60000) + 8000));
   assert.match(request.checkout_key, /^[0-9a-f]{48}$/);
   return request;
 }
@@ -131,7 +131,7 @@ test('owner sign-in is allowlisted and link consumption is single-use', async ()
   assert.match((await outsider('/admin/session', choose)).headers.get('Location'), /expired/);
   assert.equal((await admin('/admin')).headers.get('Location'), '/admin/login');
   assert.equal((await admin('/admin/session', { action: 'password', password: ownerPassword })).headers.get('Location'), '/admin');
-  const migration = await readFile(new URL('../migrations/' + ownerSchema, import.meta.url), 'utf8');
+  const migration = await readFile(new URL('../migrations/0006_owner_passwords.sql', import.meta.url), 'utf8');
   await db.batch(unstable_splitSqlQuery(migration).map((query) => db.prepare(query)));
   assert.equal(await db.prepare('SELECT count(*) AS count FROM admin_passwords').first('count'), 1);
   assert.equal(await db.prepare('SELECT count(*) AS count FROM admin_password_setups').first('count'), 0);
@@ -320,6 +320,122 @@ test('storefront search, size chart and COZY matching item follow the supplied t
   assert.equal(upsell.headers.get('Location'), sweats);
   assert.doesNotMatch(await (await web('/cart')).text(), /COMPLETE THE LOOK/);
   assert.doesNotMatch(await (await web(sweats)).text(), /COMPLETE THE LOOK/);
+});
+
+test('delivered orders support private returns, safe exchange stock, and verified refund balances', async () => {
+  await db.batch([
+    db.prepare("UPDATE variants SET inventory = 3 WHERE id = 'v'"),
+    db.prepare("INSERT INTO variants (id, product_id, title, price, inventory) VALUES ('v-exchange', 'p', 'L', 60000, 1)"),
+  ]);
+  const orderAction = (order, operation, fields = {}) => admin('/admin/action', { area: 'orders', op: 'order', id: order, operation, ...fields });
+  const returnAction = (id, operation, fields = {}) => admin('/admin/action', { area: 'returns', op: 'return', id, operation, ...fields });
+  const stock = (id) => db.prepare('SELECT inventory FROM variants WHERE id = ?').bind(id).first('inventory');
+  async function delivered(buyer, quantity) {
+    const quote = await customerCheckout(buyer, 'returns-buyer@example.invalid', 'cod', '', quantity);
+    const placed = await buyer('/api/checkout', quote);
+    const order = placed.headers.get('Location').split('/').at(-1);
+    assert.match(order, /^[0-9a-f]{32}$/);
+    for (const action of ['confirm', 'ship', 'collect', 'deliver']) {
+      assert.match((await orderAction(order, action, { tracking: 'OUTBOUND-TEST' })).headers.get('Location'), /saved=1/);
+    }
+    return order;
+  }
+
+  const buyer = browser();
+  const order = await delivered(buyer, 1);
+  const item = { order, variant: 'v', quantity: 1, reason: 'The size is too small.', kind: 'exchange', replacement: 'v-exchange' };
+  const first = { ...item, request_id: '1'.repeat(32) };
+  assert.match((await browser()('/api/return-request', first)).headers.get('Location'), /^\/account\?error=/);
+  await db.prepare('UPDATE order_deliveries SET delivered_at = unixepoch() - 1296000 WHERE order_id = ?').bind(order).run();
+  assert.match((await buyer('/api/return-request', first)).headers.get('Location'), /error=/);
+  await db.prepare('UPDATE order_deliveries SET delivered_at = unixepoch() WHERE order_id = ?').bind(order).run();
+  const orderPage = await (await buyer('/orders/' + order)).text();
+  assert.match(orderPage, /Size exchange/);
+  assert.match(orderPage, /v-exchange/);
+  assert.match((await buyer('/api/return-request', first)).headers.get('Location'), /return-sent=1/);
+  assert.match((await buyer('/api/return-request', first)).headers.get('Location'), /return-sent=1/);
+  const second = { ...item, request_id: '2'.repeat(32) };
+  assert.match((await buyer('/api/return-request', second)).headers.get('Location'), /error=/);
+  assert.match(await (await admin('/admin/returns')).text(), /Awaiting review/);
+  const instructions = { message: 'Return the item to the store.' };
+  assert.match((await returnAction(first.request_id, 'approve', instructions)).headers.get('Location'), /saved=1/);
+  assert.equal(await stock('v-exchange'), 0);
+  assert.match((await returnAction(first.request_id, 'approve', instructions)).headers.get('Location'), /error=/);
+  assert.match((await returnAction(first.request_id, 'cancel', { message: 'Customer cancelled.' })).headers.get('Location'), /saved=1/);
+  assert.equal(await stock('v-exchange'), 1);
+  assert.match((await buyer('/api/return-request', second)).headers.get('Location'), /return-sent=1/);
+  assert.match((await returnAction(second.request_id, 'approve', instructions)).headers.get('Location'), /saved=1/);
+  assert.match((await returnAction(second.request_id, 'receive', { restock: 'on' })).headers.get('Location'), /saved=1/);
+  assert.match((await returnAction(second.request_id, 'receive', { restock: 'on' })).headers.get('Location'), /error=/);
+  assert.equal(await stock('v'), 3);
+  assert.equal(await stock('v-exchange'), 0);
+  assert.match((await returnAction(second.request_id, 'complete', { reference: 'EXCHANGE-TEST' })).headers.get('Location'), /saved=1/);
+  assert.match(await (await buyer('/orders/' + order)).text(), /Replacement sent/);
+
+  const refundBuyer = browser();
+  const refundOrder = await delivered(refundBuyer, 2);
+  const refundIds = ['3'.repeat(32), '4'.repeat(32)];
+  for (const request_id of refundIds) {
+    const request = { order: refundOrder, variant: 'v', quantity: 1, kind: 'refund', reason: 'Test return', request_id };
+    assert.match((await refundBuyer('/api/return-request', request)).headers.get('Location'), /return-sent=1/);
+    assert.match((await returnAction(request_id, 'approve', instructions)).headers.get('Location'), /saved=1/);
+    assert.match((await returnAction(request_id, 'receive')).headers.get('Location'), /saved=1/);
+  }
+  assert.match((await orderAction(refundOrder, 'refund', { payment_note: 'Duplicate path' })).headers.get('Location'), /error=/);
+  assert.match((await returnAction(refundIds[0], 'complete', { amount: '600', reference: 'REFUND-ONE' })).headers.get('Location'), /saved=1/);
+  const payment = () => db.prepare('SELECT payment_status FROM orders WHERE id = ?').bind(refundOrder).first('payment_status');
+  assert.equal(await payment(), 'paid');
+  assert.match((await returnAction(refundIds[1], 'complete', { amount: '681', reference: 'REFUND-TWO' })).headers.get('Location'), /error=/);
+  assert.match((await returnAction(refundIds[1], 'complete', { amount: '680', reference: 'refund-one' })).headers.get('Location'), /error=/);
+  assert.match((await returnAction(refundIds[1], 'complete', { amount: '680', reference: 'REFUND-TWO' })).headers.get('Location'), /saved=1/);
+  assert.equal(await payment(), 'refunded');
+  assert.match(await (await refundBuyer('/orders/' + refundOrder)).text(), /Refund recorded/);
+});
+
+test('Shopify import is private, repeatable, and preserves native orders and verified inventory', async () => {
+  const email = 'archive-buyer@example.invalid';
+  const exportedAt = Math.floor(Date.now() / 1000);
+  const snapshot = {
+    version: 1, exportedAt,
+    orders: [{ id: '42', number: '#SHOPIFY-42', email, created: exportedAt - 86400, cancelled: null,
+      payment: 'paid', fulfillment: 'fulfilled', amount: '600.00', currency: 'EGP',
+      items: [{ name: 'Archived hoodie', sku: 'ARCHIVE-SKU', quantity: 1 }], details: { header: { 'Shipping City': 'Test City' } } }],
+    customers: [{ id: '17', email, name: 'Archive Buyer', details: { 'First Name': 'Archive' } }],
+    products: [{ handle: 'test-hoodie', details: [{ Title: 'Archived hoodie' }] }],
+    variants: [{ id: 'v', handle: 'test-hoodie', available: 90, sku: '' },
+      { id: 'v-import', handle: 'test-hoodie', available: 3, sku: 'MIGRATED-XS' }],
+    discounts: [{ Name: 'ARCHIVE-BUNDLE', Type: 'Buy X get Y', Status: 'Active', Value: '50%' }],
+  };
+  await db.prepare("INSERT INTO variants (id, product_id, title, price) VALUES ('v-import', 'p', 'XS', 60000)").run();
+  const orderCount = () => db.prepare('SELECT count(*) AS count FROM orders').first('count');
+  const countBefore = await orderCount();
+  const stockBefore = await db.prepare("SELECT inventory FROM variants WHERE id = 'v'").first('inventory');
+  function form(data = snapshot) {
+    const body = new FormData();
+    body.set('op', 'shopify-import');
+    body.set('area', 'migration');
+    body.set('snapshot', new File([JSON.stringify(data)], 'migration.json', { type: 'application/json' }));
+    return body;
+  }
+  assert.equal((await browser()('/admin/action', form())).status, 401);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.equal((await admin('/admin/action', form())).headers.get('Location'), '/admin/migration?saved=1');
+  }
+  assert.match((await admin('/admin/action', form({ ...snapshot, exportedAt: exportedAt - 1 }))).headers.get('Location'), /newer\+Shopify/);
+  assert.equal(await orderCount(), countBefore);
+  assert.equal(await db.prepare('SELECT count(*) AS count FROM shopify_orders').first('count'), 1);
+  assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id = 'v'").first('inventory'), stockBefore);
+  assert.deepEqual(await db.prepare("SELECT inventory, sku FROM variants WHERE id = 'v-import'").first(), { inventory: 3, sku: 'MIGRATED-XS' });
+  assert.match(await (await admin('/admin/orders?source=shopify')).text(), /#SHOPIFY-42/);
+  assert.match(await (await admin('/admin/migration')).text(), /Latest Shopify snapshot/);
+  assert.match(await (await admin('/admin/discounts')).text(), /ARCHIVE-BUNDLE/);
+  assert.equal(await db.prepare("SELECT 1 FROM discounts WHERE code = 'ARCHIVE-BUNDLE'").first(), null);
+  const buyer = browser();
+  assert.doesNotMatch(await (await buyer('/account?source=shopify')).text(), /#SHOPIFY-42/);
+  await buyer('/account/session', { action: 'request', email });
+  const token = /token=([a-f0-9]{64})/.exec(mail.at(-1).text)[1];
+  assert.equal((await buyer('/account/session', { action: 'confirm', token })).headers.get('Location'), '/account');
+  assert.match(await (await buyer('/account?source=shopify')).text(), /#SHOPIFY-42/);
 });
 
 test('owner password sign-in, password changes, and private recovery keep admin sessions protected', async () => {

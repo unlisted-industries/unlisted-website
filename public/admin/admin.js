@@ -46,9 +46,9 @@ if (menu) {
   });
 }
 
-const search = document.querySelector('[data-admin-search]');
+const searches = document.querySelectorAll('[data-admin-search]');
 const dialog = document.querySelector('[data-admin-search-dialog]');
-if (search && typeof dialog?.showModal === 'function') {
+if (searches.length && typeof dialog?.showModal === 'function') {
   const input = dialog.querySelector('input');
   const items = [...dialog.querySelectorAll('[data-search-item]')];
   const empty = dialog.querySelector('[data-search-empty]');
@@ -64,8 +64,10 @@ if (search && typeof dialog?.showModal === 'function') {
     dialog.showModal();
     input.focus();
   }
-  search.hidden = false;
-  search.addEventListener('click', openSearch);
+  for (const search of searches) {
+    search.hidden = false;
+    search.addEventListener('click', openSearch);
+  }
   input.addEventListener('input', filterPages);
   input.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') items.find((item) => !item.hidden)?.querySelector('a').click();

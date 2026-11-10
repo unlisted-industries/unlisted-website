@@ -56,7 +56,7 @@ const searchable = [
             <a href={'/admin/' + key} class:list={[workspace === key && 'section-active']} aria-current={current === key ? 'page' : undefined}><Icon name={key} /> {label}</a>
           </li>)}
         </ul>
-        {workspace === 'website' && <>
+        {(workspace === 'website' || workspace === 'overview') && <>
           <p class="admin-nav-heading website-nav-heading">Website</p>
           <ul class="admin-nav-list">
             {websiteSections.map(({ key, label, children }) => <li>
@@ -69,7 +69,7 @@ const searchable = [
         </>}
       </nav>
     </aside>
-    <main class="admin-main">
+    <main class:list={['admin-main', current === 'overview' && 'admin-home-main']}>
       <Notice success={Astro.url.searchParams.has('saved') ? 'Changes saved.' : null} />
       <slot />
     </main>

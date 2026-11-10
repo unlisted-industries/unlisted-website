@@ -6,9 +6,14 @@ import { all } from '../../lib/db.js';
 import { currentUser, emailReady } from '../../lib/auth.js';
 import { displayDate, money } from '../../lib/content.js';
 const user = await currentUser(env, Astro);
+const archive = Astro.url.searchParams.get('source') === 'shopify';
 const offset = Math.max(0, Math.min(10000, Number.parseInt(Astro.url.searchParams.get('offset') ?? '0', 10) || 0));
-const orders = user ? await all(env.DB.prepare(`SELECT id, created_at, status, payment_status, total FROM orders
-  WHERE email = ? COLLATE NOCASE ORDER BY created_at DESC LIMIT 26 OFFSET ?`).bind(user.email, offset)) : [];
+const orders = user ? await all(env.DB.prepare(archive
+  ? `SELECT order_number, created_at, cancelled_at, payment, fulfillment, amount, currency FROM shopify_orders
+    WHERE email = ? COLLATE NOCASE ORDER BY created_at DESC LIMIT 26 OFFSET ?`
+  : `SELECT id, created_at, status, total FROM orders WHERE email = ? COLLATE NOCASE ORDER BY created_at DESC LIMIT 26 OFFSET ?`)
+  .bind(user.email, offset)) : [];
+const page = (index) => '/account?' + (archive ? 'source=shopify&' : '') + 'offset=' + index;
 ---
 <Store title="My account" noIndex>
   <section class="store-checkout">
@@ -16,10 +21,13 @@ const orders = user ? await all(env.DB.prepare(`SELECT id, created_at, status, p
     {user ? <>
       <p>{user.email}</p>
       <h2>Orders</h2>
+      <p><a href="/account" aria-current={!archive ? 'page' : undefined}>UNLISTED orders</a> · <a href="/account?source=shopify" aria-current={archive ? 'page' : undefined}>Shopify history</a></p>
       {orders.length ? <ul class="account-orders">{orders.slice(0, 25).map((order) => <li>
-        <a href={'/orders/' + order.id}>Order {order.id.slice(0, 8).toUpperCase()}</a> · {displayDate(order.created_at)} · {money(order.total, true)} · {order.status}
+        {archive ? <>{order.order_number} · {displayDate(order.created_at)} · {order.amount} {order.currency} · {order.cancelled_at ? 'Cancelled' : order.fulfillment}</> :
+          <><a href={'/orders/' + order.id}>Order {order.id.slice(0, 8).toUpperCase()}</a> · {displayDate(order.created_at)} · {money(order.total, true)} · {order.status}</>}
       </li>)}</ul> : <p>No orders yet.</p>}
-      <p>{offset > 0 && <a href={'/account?offset=' + Math.max(0, offset - 25)}>Previous</a>} {orders.length > 25 && <a href={'/account?offset=' + (offset + 25)}>Next</a>}</p>
+      {archive && orders.length > 0 && <p><a href="/pages/contact">Contact us</a> about a Shopify order.</p>}
+      <p>{offset > 0 && <a href={page(Math.max(0, offset - 25))}>Previous</a>} {orders.length > 25 && <a href={page(offset + 25)}>Next</a>}</p>
       <form method="post" action="/account/session">
         <input type="hidden" name="action" value="logout" />
         <button class="btn" type="submit">SIGN OUT</button>

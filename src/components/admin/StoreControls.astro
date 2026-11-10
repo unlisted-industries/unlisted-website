@@ -2,11 +2,16 @@
 import { env } from 'cloudflare:workers';
 import { all } from '../../lib/db.js';
 import { money } from '../../lib/content.js';
+import { ensureShopifyImport } from '../../lib/shopify-import.js';
 import Discount from './Discount.astro';
 import ShippingRate from './ShippingRate.astro';
 const { section } = Astro.props;
 const discounts = section === 'discounts';
 const rows = await all(env.DB.prepare(discounts ? 'SELECT * FROM discounts ORDER BY code' : 'SELECT * FROM shipping_rates ORDER BY label'));
+if (discounts) await ensureShopifyImport(env.DB);
+const archived = discounts ? await all(env.DB.prepare(`SELECT name, json_extract(data, '$.Type') AS type,
+  json_extract(data, '$.Status') AS status, json_extract(data, '$.Value') AS value
+  FROM shopify_discount_details ORDER BY name LIMIT 100`)) : [];
 ---
 <div class="admin-heading">
   <div><p class="overline">CHECKOUT</p><h1>{discounts ? 'Discounts' : 'Shipping'}</h1>
@@ -22,3 +27,11 @@ const rows = await all(env.DB.prepare(discounts ? 'SELECT * FROM discounts ORDER
   {!rows.length && <p class="muted">{discounts ? 'No discount codes yet.' : 'No rates yet. Add each verified governorate rate below.'}</p>}
 </section>
 <section class="panel"><h2>{discounts ? 'Add a discount' : 'Add a rate'}</h2>{discounts ? <Discount /> : <ShippingRate />}</section>
+{archived.length > 0 && <section class="panel">
+  <h2>Shopify promotion archive</h2>
+  <p class="muted">Review these rules against the checkout before recreating them.</p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Promotion</th><th>Type</th><th>Shopify status</th><th>Value</th></tr></thead>
+    <tbody>{archived.map((row) => <tr><td>{row.name}</td><td>{row.type}</td><td>{row.status}</td><td>{row.value ?? '—'}</td></tr>)}</tbody>
+  </table></div>
+</section>}

@@ -7,6 +7,7 @@ export const workspaceSections = [
 
 export const websiteSections = [
   { key: 'orders', label: 'Orders' },
+  { key: 'returns', label: 'Returns & exchanges' },
   { key: 'products', label: 'Products', children: [
     { key: 'collections', label: 'Collections' },
     { key: 'inventory', label: 'Inventory' },
@@ -17,5 +18,5 @@ export const websiteSections = [
   { key: 'analytics', label: 'Analytics' },
   { key: 'online-store', label: 'Online Store' },
   { key: 'inbox', label: 'Inbox' },
-  { key: 'settings', label: 'Settings', children: [{ key: 'shipping', label: 'Shipping' }] },
+  { key: 'settings', label: 'Settings', children: [{ key: 'shipping', label: 'Shipping' }, { key: 'migration', label: 'Shopify migration' }] },
 ];

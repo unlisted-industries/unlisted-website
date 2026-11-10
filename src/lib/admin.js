@@ -3,11 +3,14 @@ import { discountCode, acceptedOrder } from './checkout.js';
 import { safeHtml, safeLink, parseCairoDateTime } from './content.js';
 import { checked, priceValue, quantityValue, slugValue, StoreError, textValue } from './http.js';
 import { cardReady } from './paymob.js';
+import { ensureReturns, manageReturn } from './returns.js';
+import { importShopify } from './shopify-import.js';
 
 export const adminSections = [
   ['products', 'Products'], ['collections', 'Collections'], ['orders', 'Orders'], ['customers', 'Customers'],
   ['discounts', 'Discounts'], ['shipping', 'Shipping'], ['content', 'Content'],
   ['media', 'Media'], ['inbox', 'Inbox'], ['settings', 'Settings'],
+  ['returns', 'Returns & exchanges'], ['migration', 'Shopify migration'],
 ];
 
 export function queryOffset(url) {
@@ -157,7 +160,8 @@ const transitions = {
   deliver: "status = 'delivered', updated_at = unixepoch() WHERE id = ? AND status = 'shipped'",
   cancel: "status = 'cancelled', payment_status = CASE WHEN payment_status = 'pending' THEN 'unpaid' ELSE payment_status END, checkout_url = NULL, updated_at = unixepoch() WHERE id = ? AND status IN ('new','confirmed') AND payment_status IN ('unpaid','pending','refunded')",
   collect: "payment_status = 'paid', updated_at = unixepoch() WHERE id = ? AND payment_method = 'cod' AND payment_status = 'unpaid' AND status IN ('confirmed','shipped','delivered')",
-  refund: "payment_status = 'refunded', payment_note = ?, updated_at = unixepoch() WHERE id = ? AND payment_status IN ('paid','review')",
+  refund: `payment_status = 'refunded', payment_note = ?, updated_at = unixepoch() WHERE id = ? AND payment_status IN ('paid','review')
+    AND NOT EXISTS (SELECT 1 FROM order_returns WHERE order_id = orders.id AND kind = 'refund' AND state NOT IN ('declined','cancelled'))`,
 };
 
 async function orderAction(env, form) {
@@ -166,6 +170,16 @@ async function orderAction(env, form) {
   if (!isToken(id, 16) || !Object.hasOwn(transitions, action)) throw new StoreError('Choose a valid order action.');
   const values = action === 'ship' ? [textValue(form, 'tracking', 180, false)]
     : action === 'refund' ? [textValue(form, 'payment_note', 180)] : [];
+  if (action === 'deliver' || action === 'refund') await ensureReturns(env.DB);
+  if (action === 'deliver') {
+    const [delivered] = await statements(env.DB, [
+      ['UPDATE orders SET ' + transitions.deliver, id],
+      [`INSERT INTO order_deliveries (order_id, delivered_at) SELECT id, updated_at FROM orders
+        WHERE id = ? AND status = 'delivered' ON CONFLICT (order_id) DO NOTHING`, id],
+    ]);
+    oneChange(delivered, 'This action is unavailable for the current order status.');
+    return path('orders', 'order', id);
+  }
   const changed = await env.DB.prepare('UPDATE orders SET ' + transitions[action] + ' RETURNING id')
     .bind(...values, id).first();
   if (!changed) throw new StoreError('This action is unavailable for the current order status.', 409);
@@ -279,15 +293,17 @@ async function inboxAction(env, form) {
 export const adminActions = {
   product: productAction, variant: variantAction, collection: collectionAction,
   page: pageAction, shipping: shippingAction, discount: discountAction, order: orderAction,
-  media: mediaAction, settings: settingsAction, inbox: inboxAction,
+  media: mediaAction, settings: settingsAction, inbox: inboxAction, return: manageReturn, 'shopify-import': importShopify,
 };
 
 export async function dashboard(db, days) {
+  await ensureReturns(db);
   const since = unixNow() - days * 86400;
   const day = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Africa/Cairo' }).format(new Date(since * 1000));
   const results = await statements(db, [
     [`SELECT count(*) AS sales, coalesce(sum(total), 0) AS gross,
-      coalesce(sum(CASE WHEN payment_status = 'paid' THEN total ELSE 0 END), 0) AS revenue
+      coalesce(sum(CASE WHEN payment_status = 'paid' THEN total - (SELECT coalesce(sum(refund_amount), 0)
+        FROM order_returns WHERE order_id = orders.id AND state = 'completed') ELSE 0 END), 0) AS revenue
       FROM orders WHERE created_at >= ? AND ${acceptedOrder}`, since],
     ['SELECT count(DISTINCT visitor_id) AS visitors FROM visits WHERE day >= ?', day],
     [`SELECT count(DISTINCT o.visitor_id) AS converted FROM orders o
@@ -301,10 +317,12 @@ export async function dashboard(db, days) {
       WHERE p.status = 'active' AND p.preorder = 0 AND v.active = 1 AND v.published_available = 1 AND v.inventory IS NULL`],
     ["SELECT count(*) AS count FROM payment_events WHERE state = 'late'"],
     ["SELECT count(*) AS count FROM orders WHERE status = 'new' AND (payment_method = 'cod' OR payment_status = 'paid')"],
+    ["SELECT count(*) AS count FROM order_returns WHERE state = 'requested'"],
   ]);
   return {
     ...results[0].results[0], visitors: results[1].results[0].visitors, converted: results[2].results[0].converted,
     products: results[3].results, unknownStock: results[4].results[0].count,
     latePayments: results[5].results[0].count, newOrders: results[6].results[0].count,
+    newReturns: results[7].results[0].count,
   };
 }

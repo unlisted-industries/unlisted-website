@@ -1,0 +1,81 @@
+---
+import { env } from 'cloudflare:workers';
+import { all, isToken } from '../../lib/db.js';
+import { queryOffset } from '../../lib/admin.js';
+import { displayDate, money } from '../../lib/content.js';
+import { ensureReturns, returnLabel } from '../../lib/returns.js';
+import Fields from './Fields.astro';
+import Pagination from './Pagination.astro';
+
+await ensureReturns(env.DB);
+const offset = queryOffset(Astro.url);
+const id = Astro.url.searchParams.get('return');
+const closed = Astro.url.searchParams.get('state') === 'closed';
+const detail = isToken(id, 16) ? await env.DB.prepare(`SELECT r.*, o.email, o.name, o.payment_method, o.payment_status, o.total,
+    i.product_title, i.variant_title, v.title AS replacement, original.inventory AS original_stock,
+    (SELECT coalesce(sum(refund_amount), 0) FROM order_returns WHERE order_id = o.id AND state = 'completed') AS refunded,
+    (SELECT provider_txn FROM payment_events WHERE order_id = o.id AND state = 'captured' LIMIT 1) AS paymob_txn
+  FROM order_returns r JOIN orders o ON o.id = r.order_id
+  JOIN order_items i ON i.order_id = r.order_id AND i.variant_id = r.variant_id
+  JOIN variants original ON original.id = r.variant_id LEFT JOIN variants v ON v.id = r.replacement_id
+  WHERE r.id = ?`).bind(id).first() : null;
+const rows = id ? [] : await all(env.DB.prepare(`SELECT r.*, o.name, i.product_title, i.variant_title
+  FROM order_returns r JOIN orders o ON o.id = r.order_id
+  JOIN order_items i ON i.order_id = r.order_id AND i.variant_id = r.variant_id
+  WHERE (r.state IN ('completed', 'declined', 'cancelled')) = ?
+  ORDER BY r.created_at DESC, r.id LIMIT 26 OFFSET ?`).bind(Number(closed), offset));
+const actions = detail ? {
+  requested: [['approve', 'Approve request'], ['decline', 'Decline request']],
+  approved: [['receive', 'Confirm item received'], ['cancel', 'Cancel approval']],
+  received: [['complete', detail.kind === 'refund' ? 'Record verified refund' : 'Record replacement sent']],
+}[detail.state] ?? [] : [];
+const balance = detail?.payment_status === 'paid' ? detail.total - detail.refunded : 0;
+---
+<div class="admin-heading"><div><p class="overline">STORE OPERATIONS</p>
+  <h1>{detail ? 'Return ' + detail.id.slice(0, 8).toUpperCase() : 'Returns & exchanges'}</h1>
+  <p>{detail ? returnLabel(detail) : 'Review customer requests, receive items, and record refunds or replacements.'}</p>
+</div>{id && <a class="button" href="/admin/returns">Back to requests</a>}</div>
+{detail ? <>
+  <section class="panel"><h2>{detail.quantity} × {detail.product_title}</h2>
+    <dl class="admin-kv">
+      <div><dt>Order</dt><dd><a href={'/admin/orders?order=' + detail.order_id}>#{detail.order_id.slice(0, 8).toUpperCase()}</a></dd></div>
+      <div><dt>Customer</dt><dd>{detail.name} · {detail.email}</dd></div>
+      <div><dt>Item</dt><dd>{detail.variant_title}</dd></div>
+      <div><dt>Request</dt><dd>{detail.kind === 'refund' ? 'Refund' : 'Exchange for ' + detail.replacement}</dd></div>
+      <div><dt>Submitted</dt><dd>{displayDate(detail.created_at)}</dd></div>
+      <div><dt>Payment</dt><dd>{detail.payment_method.toUpperCase()} · {detail.payment_status}</dd></div>
+      {detail.paymob_txn && <div><dt>Paymob transaction</dt><dd>{detail.paymob_txn}</dd></div>}
+      {detail.reference && <div><dt>{detail.kind === 'refund' ? 'Refund reference' : 'Replacement tracking'}</dt><dd>{detail.reference}</dd></div>}
+      {detail.refund_amount > 0 && <div><dt>Refund recorded</dt><dd>{money(detail.refund_amount, true)}</dd></div>}
+    </dl>
+    <p class="preserve">{detail.reason}</p>
+    {detail.message && <p class="preserve"><strong>Message to customer</strong><br />{detail.message}</p>}
+  </section>
+  {actions.length > 0 && <section class="panel"><h2>Next steps</h2><div class="action-grid">
+    {actions.map(([action, label]) => <form class="admin-form" method="post" action="/admin/action">
+      <Fields op="return" area="returns" query={'return=' + detail.id} />
+      <input type="hidden" name="id" value={detail.id} /><input type="hidden" name="operation" value={action} />
+      {['approve', 'decline', 'cancel'].includes(action) && <label>{action === 'approve' ? 'Return instructions for the customer' : 'Reason shown to the customer'}<textarea name="message" maxlength="800" required></textarea></label>}
+      {action === 'approve' && detail.kind === 'exchange' && <p class="muted">Approval reserves the replacement size in inventory.</p>}
+      {action === 'receive' && detail.original_stock !== null && <label class="check"><input type="checkbox" name="restock" /> Restock the item after inspection</label>}
+      {action === 'complete' && (detail.kind === 'refund' ? <>
+        <p class="muted">Send the refund through Paymob or your courier first. Record the confirmed amount here.</p>
+        <label>Amount in EGP<input name="amount" inputmode="decimal" required /></label>
+        <p class="muted">Remaining refundable balance {money(balance, true)}</p>
+        <label>Provider or courier refund reference<input name="reference" maxlength="180" required /></label>
+      </> : <label>Replacement tracking or delivery reference<input name="reference" maxlength="180" required /></label>)}
+      <button class="button" disabled={action === 'complete' && detail.kind === 'refund' && balance <= 0}>{label}</button>
+    </form>)}
+  </div></section>}
+</> : id ? <p>Return request not found.</p> : <section class="panel">
+  <div class="tabs"><a href="/admin/returns" aria-current={!closed ? 'page' : undefined}>Open requests</a>
+    <a href="/admin/returns?state=closed" aria-current={closed ? 'page' : undefined}>Closed requests</a></div>
+  {rows.length ? <div class="table-wrap"><table>
+    <thead><tr><th>Request</th><th>Item</th><th>Customer</th><th>Status</th></tr></thead>
+    <tbody>{rows.slice(0, 25).map((row) => <tr>
+      <td><a href={'/admin/returns?return=' + row.id}>{row.kind === 'refund' ? 'Refund' : 'Size exchange'} #{row.id.slice(0, 8).toUpperCase()}</a><br /><small>{displayDate(row.created_at)}</small></td>
+      <td>{row.quantity} × {row.product_title}<br /><small>{row.variant_title}</small></td><td>{row.name}</td><td><span class="pill">{returnLabel(row)}</span></td>
+    </tr>)}</tbody>
+  </table></div> : <p class="muted">No {closed ? 'closed' : 'open'} requests.</p>}
+  <Pagination offset={offset} more={rows.length > 25} />
+</section>}

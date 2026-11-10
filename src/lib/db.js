@@ -6,6 +6,16 @@ export function statements(db, entries) {
   return db.batch(entries.map(([sql, ...values]) => db.prepare(sql).bind(...values)));
 }
 
+export function initializeTables(migration) {
+  const schema = migration.split(';').map((sql) => sql.trim()).filter(Boolean);
+  const initialized = new WeakSet();
+  return async (db) => {
+    if (initialized.has(db)) return;
+    await db.batch(schema.map((sql) => db.prepare(sql)));
+    initialized.add(db);
+  };
+}
+
 export function unixNow() {
   return Math.floor(Date.now() / 1000);
 }

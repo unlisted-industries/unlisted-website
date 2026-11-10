@@ -1,0 +1,31 @@
+---
+import { env } from 'cloudflare:workers';
+import { displayDate } from '../../lib/content.js';
+import { ensureShopifyImport } from '../../lib/shopify-import.js';
+import Fields from './Fields.astro';
+
+await ensureShopifyImport(env.DB);
+const latest = await env.DB.prepare('SELECT * FROM shopify_imports ORDER BY exported_at DESC LIMIT 1').first();
+---
+<div class="admin-heading"><div><p class="overline">STORE SETUP</p><h1>Shopify migration</h1>
+  <p>Bring your historical orders, customers, product records and verified stock into this workspace.</p>
+</div></div>
+<section class="panel">
+  <h2>{latest ? 'Latest Shopify snapshot' : 'Import a Shopify snapshot'}</h2>
+  {latest ? <dl class="admin-kv">
+    <div><dt>Exported</dt><dd>{displayDate(latest.exported_at)}</dd></div>
+    <div><dt>Archived orders</dt><dd><a href="/admin/orders?source=shopify">{latest.order_count}</a></dd></div>
+    <div><dt>Customer profiles</dt><dd><a href="/admin/customers">{latest.customer_count}</a></dd></div>
+    <div><dt>Catalog records</dt><dd><a href="/admin/products">{latest.product_count}</a></dd></div>
+    <div><dt>Archived promotion rules</dt><dd><a href="/admin/discounts">{latest.discount_count}</a></dd></div>
+    <div><dt>Previously unverified stock counts filled</dt><dd><a href="/admin/inventory">{latest.stock_count}</a></dd></div>
+  </dl> : <p class="muted">A private migration file is required to load Shopify orders and customer profiles.</p>}
+</section>
+<section class="panel"><h2>Upload migration file</h2>
+  <p>Historical orders appear in the Shopify archive. Inventory import fills unverified balances and preserves counts already set in UNLISTED.</p>
+  <form class="admin-form" method="post" action="/admin/action" enctype="multipart/form-data">
+    <Fields op="shopify-import" area="migration" />
+    <label>Prepared Shopify migration JSON<input type="file" name="snapshot" accept=".json,application/json" required /></label>
+    <button class="button primary" type="submit">Import snapshot</button>
+  </form>
+</section>

@@ -9,6 +9,8 @@ import StoreOverview from '../../components/admin/StoreOverview.astro';
 import Business from '../../components/admin/Business.astro';
 import Inventory from '../../components/admin/Inventory.astro';
 import OnlineStore from '../../components/admin/OnlineStore.astro';
+import Returns from '../../components/admin/Returns.astro';
+import Migration from '../../components/admin/Migration.astro';
 import { currentUser } from '../../lib/auth.js';
 import { adminSections } from '../../lib/admin.js';
 import { workspaceSections } from '../../lib/admin-navigation.js';
@@ -27,6 +29,8 @@ if (!label) Astro.response.status = 404;
     : workspace ? <Business section={section} title={label} />
     : section === 'inventory' ? <Inventory />
     : section === 'online-store' ? <OnlineStore />
+    : section === 'returns' ? <Returns />
+    : section === 'migration' ? <Migration />
     : section === 'products' || section === 'collections' ? <Products section={section} />
     : section === 'orders' || section === 'customers' || section === 'inbox' ? <Orders section={section} />
     : section === 'content' || section === 'media' || section === 'settings' ? <Content section={section} />

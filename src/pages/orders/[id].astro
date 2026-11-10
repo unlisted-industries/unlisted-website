@@ -2,6 +2,7 @@
 import { env } from 'cloudflare:workers';
 import Store from '../../layouts/Store.astro';
 import Notice from '../../components/Notice.astro';
+import OrderReturns from '../../components/OrderReturns.astro';
 import { orderLines, visibleOrder } from '../../lib/checkout.js';
 import { displayDate, money } from '../../lib/content.js';
 const order = await visibleOrder(env, Astro, Astro.params.id);
@@ -11,7 +12,7 @@ if (!order) Astro.response.status = 404;
 <Store title="Order status" noIndex>
   <section class="store-checkout">
     <h1>{order ? 'ORDER ' + order.id.slice(0, 8).toUpperCase() : 'ORDER NOT FOUND'}</h1>
-    <Notice />
+    {!Astro.url.searchParams.has('return-request') && <Notice />}
     {order ? <>
       <p>{displayDate(order.created_at)} · {order.status}</p>
       {order.payment_status === 'pending' && <p>Payment confirmation is pending. This page updates when Paymob verifies the transaction.</p>}
@@ -30,6 +31,7 @@ if (!order) Astro.response.status = 404;
         <input type="hidden" name="order" value={order.id} />
         <button class="btn" type="submit">CONTINUE TO PAYMENT</button>
       </form>}
+      <OrderReturns order={order} lines={lines} />
       <p><a href="/account">My account</a> · <a href="/">Continue shopping</a></p>
     </> : <p><a href="/account">Sign in</a> with the email used at checkout to see your orders.</p>}
   </section>

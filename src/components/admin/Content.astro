@@ -2,7 +2,7 @@
 import { env } from 'cloudflare:workers';
 import { all } from '../../lib/db.js';
 import { getSettings, lookupPage } from '../../lib/catalog.js';
-import { cardReady } from '../../lib/paymob.js';
+import { cardReady, paymentOrigin } from '../../lib/paymob.js';
 import { emailReady } from '../../lib/auth.js';
 import { mediaUrl } from '../../lib/content.js';
 import { queryOffset } from '../../lib/admin.js';
@@ -25,6 +25,7 @@ const [store, pages, page, media] = await Promise.all([
 const nav = store ? [...store.navigation, ...Array.from({ length: Math.min(3, 24 - store.navigation.length) }, () => ({}))] : [];
 const social = store ? [...store.socials, ...Array.from({ length: Math.min(2, 24 - store.socials.length) }, () => ({}))] : [];
 const title = content ? page?.title ?? (adding ? 'Add a page' : 'Pages') : mediaPage ? 'Files' : 'Store settings';
+const callbackOrigin = paymentOrigin(env) ?? Astro.url.origin;
 ---
 <div class="admin-heading"><div><p class="overline">STOREFRONT</p><h1>{title}</h1>
   {(page || adding) && <a class="quiet-link" href="/admin/content">← Back to pages</a>}</div>
@@ -96,7 +97,7 @@ const title = content ? page?.title ?? (adding ? 'Add a page' : 'Pages') : media
     </div>)}</div>
   </section>
   <section class="panel">
-    <h2>Checkout and analytics</h2>
+    <h2 id="payments">Checkout and analytics</h2>
     <p class="muted">Currency is EGP. Checkout requires verified inventory, active delivery rates and an available payment method.</p>
     <div class="check-grid">
       <label class="check"><input name="checkout_enabled" type="checkbox" checked={Boolean(store.checkout_enabled)} /> Enable checkout</label>
@@ -107,6 +108,8 @@ const title = content ? page?.title ?? (adding ? 'Add a page' : 'Pages') : media
     <dl class="admin-kv">
       <div><dt>Worker checkout gate</dt><dd>{env.CHECKOUT_ENABLED === 'true' ? 'Open' : 'Closed'}</dd></div>
       <div><dt>Paymob</dt><dd>{cardReady(env) ? 'Configured' : 'Credentials pending'}</dd></div>
+      <div><dt>Paymob webhook</dt><dd><code>{callbackOrigin}/api/paymob</code></dd></div>
+      <div><dt>Paymob return URL</dt><dd><code>{callbackOrigin}/api/payment-return</code></dd></div>
       <div><dt>Sign-in and order email</dt><dd>{emailReady(env) ? 'Configured' : 'Credentials pending'}</dd></div>
     </dl>
   </section>

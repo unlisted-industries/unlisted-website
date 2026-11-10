@@ -1,0 +1,78 @@
+---
+import { env } from 'cloudflare:workers';
+import Icon from './Icon.astro';
+import ReportingPeriod from './ReportingPeriod.astro';
+import { dashboard, reportDays } from '../../lib/admin.js';
+import { workspaceSections } from '../../lib/admin-navigation.js';
+import { emailReady } from '../../lib/auth.js';
+import { getSettings } from '../../lib/catalog.js';
+import { checkoutReady } from '../../lib/checkout.js';
+import { mediaUrl, money } from '../../lib/content.js';
+import { cardReady } from '../../lib/paymob.js';
+
+const days = reportDays(Astro.url);
+const [metrics, settings, archived] = await Promise.all([
+  dashboard(env.DB, days), getSettings(Astro, env.DB),
+  env.DB.prepare('SELECT count(*) AS count FROM shopify_orders').first('count'),
+]);
+const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
+const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+const stats = [
+  ['Visitors', metrics.visitors], ['Paid revenue', money(metrics.revenue, true)], ['Orders', metrics.sales],
+  ['Conversion', metrics.visitors ? (100 * metrics.converted / metrics.visitors).toFixed(1) + '%' : '—'],
+];
+const tasks = [
+  ['orders', 'Review orders', metrics.newOrders, '/admin/orders'],
+  ['returns', 'Review return requests', metrics.newReturns, '/admin/returns'],
+  ['products', 'Verify stock counts', metrics.unknownStock, '/admin/inventory'],
+];
+const paymobConfigured = cardReady(env);
+const emailConfigured = emailReady(env);
+const checkoutOpen = checkoutReady(env, settings);
+const readiness = [
+  ['Shopify order archive', archived > 0 ? archived + ' imported' : 'Awaiting import', '/admin/migration', archived > 0],
+  ['Paymob', paymobConfigured ? 'Credentials configured' : 'Credentials pending', '/admin/settings#payments', paymobConfigured],
+  ['Order and account email', emailConfigured ? 'Configured' : 'Credentials pending', '/admin/settings#payments', emailConfigured],
+  ['Store checkout', checkoutOpen ? 'Open' : 'Closed', '/admin/settings#payments', checkoutOpen],
+];
+const poster = mediaUrl(settings.hero_poster);
+---
+<div class="workspace-home">
+  <section class="home-summary" aria-label="Store performance">
+    <div class="home-period"><p class="overline">UNLISTED STORE</p><ReportingPeriod days={days} /></div>
+    <dl class="home-stats">{stats.map(([label, value]) => <div><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+    <a href={'/admin/analytics?days=' + days} class="home-summary-link" aria-label="View detailed store analytics"><Icon name="arrow" /></a>
+  </section>
+
+  <section class="home-intro">
+    <p class="home-intro-label"><span></span> UNLISTED™ WORKSPACE</p>
+    <h1>{greeting}, UNLISTED.</h1>
+    <p>{metrics.newOrders || metrics.newReturns ? 'Review new orders and return requests from your workspace.' : 'There are no new orders or return requests to review.'}</p>
+    <button class="home-command" type="button" data-admin-search aria-haspopup="dialog" hidden><Icon name="search" /> Find a page in your workspace <kbd>Ctrl K</kbd></button>
+    <nav class="home-actions" aria-label="Store actions">
+      {tasks.map(([icon, label, count, link]) => <a href={link}><Icon name={icon} />{label}<span>{count}</span></a>)}
+    </nav>
+  </section>
+
+  <div class="home-panels">
+    <section class="panel home-ready">
+      <h2>Launch checklist</h2>
+      <dl>{readiness.map(([label, status, link, ready]) => <div>
+        <dt>{label}</dt><dd><a class:list={['home-state', ready && 'is-ready']} href={link}>{status}</a></dd>
+      </div>)}</dl>
+    </section>
+    <section class="panel home-store">
+      {poster && <img src={poster} alt="UNLISTED collection preview" loading="lazy" />}
+      <div><p class="overline">ONLINE STORE</p><h2>See your storefront</h2>
+        <a class="button" href="/" target="_blank" rel="noopener">Open storefront ↗</a>
+      </div>
+    </section>
+  </div>
+
+  <h2>Business sections</h2>
+  <nav class="workspace-grid" aria-label="Business sections">
+    {workspaceSections.map(({ key, label, description }) => <a class="panel workspace-card" href={'/admin/' + key}>
+      <span class="workspace-card-title"><Icon name={key} />{label}<Icon name="arrow" /></span><small>{description}</small>
+    </a>)}
+  </nav>
+</div>

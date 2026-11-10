@@ -3,15 +3,19 @@ import { env } from 'cloudflare:workers';
 import { all } from '../../lib/db.js';
 import { displayDate } from '../../lib/content.js';
 import { queryOffset } from '../../lib/admin.js';
+import { ensureShopifyImport } from '../../lib/shopify-import.js';
 import Pagination from './Pagination.astro';
+await ensureShopifyImport(env.DB);
 const offset = queryOffset(Astro.url);
 const q = (Astro.url.searchParams.get('q') ?? '').slice(0, 140);
-const orders = await all(env.DB.prepare(`SELECT * FROM shopify_orders
-  WHERE ? = '' OR instr(lower(email), lower(?)) > 0 OR instr(lower(order_number), lower(?)) > 0
-  ORDER BY created_at DESC LIMIT 26 OFFSET ?`).bind(q, q, q, offset));
+const orders = await all(env.DB.prepare(`SELECT o.*, d.data FROM shopify_orders o LEFT JOIN shopify_order_details d ON d.source_id = o.source_id
+  WHERE ? = '' OR instr(lower(o.email), lower(?)) > 0 OR instr(lower(o.order_number), lower(?)) > 0
+  ORDER BY o.created_at DESC LIMIT 26 OFFSET ?`).bind(q, q, q, offset));
+const fields = ['Shipping Name', 'Shipping Address1', 'Shipping Address2', 'Shipping City', 'Shipping Province Name', 'Shipping Phone',
+  'Shipping Method', 'Payment Method', 'Payment Reference', 'Refunded Amount', 'Discount Code', 'Discount Amount', 'Notes'];
 ---
 <section class="panel">
-  <div class="tabs"><a href="/admin/orders">Store orders</a><a href="/admin/orders?source=shopify" aria-current="page">Shopify archive</a></div>
+  <div class="tabs"><a href="/admin/orders">Store orders</a><a href="/admin/orders?source=shopify" aria-current="page">Shopify archive</a><a href="/admin/migration">Shopify migration</a></div>
   <form method="get" class="inline-form">
     <input type="hidden" name="source" value="shopify" />
     <label>Search <input name="q" value={q} placeholder="Email or Shopify order number" /></label>
@@ -19,13 +23,17 @@ const orders = await all(env.DB.prepare(`SELECT * FROM shopify_orders
   </form>
   {orders.length ? <div class="table-wrap"><table>
     <thead><tr><th>Shopify order</th><th>Customer</th><th>Status</th><th>Total</th></tr></thead>
-    <tbody>{orders.slice(0, 25).map((order) => <tr>
-      <td><details><summary>{order.order_number}</summary><ul>{JSON.parse(order.line_items).map((item) => <li>{item.quantity} × {item.name}</li>)}</ul></details>
-        <small>{displayDate(order.created_at)}</small></td>
-      <td>{order.email ?? 'Unavailable'}</td>
-      <td>{order.cancelled_at ? 'Cancelled' : order.fulfillment} · {order.payment}</td>
-      <td>{order.amount} {order.currency}</td>
-    </tr>)}</tbody>
+    <tbody>{orders.slice(0, 25).map((order) => {
+      const source = order.data ? JSON.parse(order.data).header : {};
+      return <tr>
+        <td><details><summary>{order.order_number}</summary><ul>{JSON.parse(order.line_items).map((item) => <li>{item.quantity} × {item.name}{item.sku && ' · ' + item.sku}</li>)}</ul>
+          <dl class="admin-kv">{fields.filter((field) => typeof source?.[field] === 'string' && source[field]).map((field) =>
+            <div><dt>{field}</dt><dd>{source[field]}</dd></div>)}</dl></details><small>{displayDate(order.created_at)}</small></td>
+        <td>{order.email ?? 'Unavailable'}</td>
+        <td>{order.cancelled_at ? 'Cancelled' : order.fulfillment} · {order.payment}</td>
+        <td>{order.amount} {order.currency}</td>
+      </tr>;
+    })}</tbody>
   </table></div> : <p class="muted">No archived orders found.</p>}
   <Pagination offset={offset} more={orders.length > 25} />
 </section>

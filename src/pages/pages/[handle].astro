@@ -13,6 +13,7 @@ const contact = page?.handle === 'contact';
     {contact && <div class="eyebrow">CUSTOMER SERVICE</div>}
     <h1 class="page-title">{page?.title ?? 'PAGE NOT FOUND'}</h1>
     {page ? <div class="description rte" set:html={safeHtml(page.body)} /> : <p><a href="/">Back to UNLISTED</a></p>}
+    {['shipping', 'returns'].includes(page?.handle) && <p>For a delivered UNLISTED order, open it in <a href="/account">My account</a> to request a return or size exchange.</p>}
     {contact && <>
       <Notice success={Astro.url.searchParams.has('sent') ? 'Your message has been received.' : null} />
       <form method="post" action="/api/contact" id="contact_form" class="contact-form">
