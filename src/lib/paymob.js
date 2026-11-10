@@ -31,6 +31,36 @@ export function cardReady(env) {
   return paymentConfigurationIssues(env).length === 0;
 }
 
+export async function createPaymobIntention(env, order, remaining) {
+  const [first, ...last] = order.name.trim().split(/\s+/);
+  const response = await fetch(gateway + '/v1/intention/', {
+    method: 'POST',
+    headers: { Authorization: 'Token ' + env.PAYMOB_SECRET_KEY, 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(12000), redirect: 'manual',
+    body: JSON.stringify({
+      amount: order.total,
+      currency: order.currency,
+      payment_methods: integrationIds(env),
+      items: [{ name: 'UNLISTED™ order ' + order.id.slice(0, 8), amount: order.total, description: 'Clothing order', quantity: 1 }],
+      billing_data: {
+        first_name: first, last_name: last.join(' ') || first, street: order.address, building: 'NA',
+        floor: 'NA', apartment: 'NA', phone_number: order.phone, email: order.email,
+        city: order.city, state: order.shipping_label, country: 'EG', postal_code: 'NA',
+      },
+      special_reference: order.id,
+      expiration: remaining,
+      notification_url: paymentOrigin(env) + '/api/paymob',
+      redirection_url: paymentOrigin(env) + '/api/payment-return?order=' + order.id,
+    }),
+  });
+  if (!response.ok) throw new StoreError('Paymob rejected the payment request.', response.status);
+  const result = await response.json();
+  if (typeof result.client_secret !== 'string' || !/^\d+$/.test(String(result.intention_order_id))) {
+    throw new Error('Intention response incomplete');
+  }
+  return result;
+}
+
 export async function startPayment(env, order) {
   const remaining = order.expires_at - unixNow();
   if (!cardReady(env) || order.payment_method !== 'card' || order.payment_status !== 'pending' || remaining < 60) {
@@ -45,33 +75,8 @@ export async function startPayment(env, order) {
     if (current?.checkout_url) return current.checkout_url;
     throw new StoreError('Payment is being prepared. Try again shortly.', 409);
   }
-  const [first, ...last] = order.name.trim().split(/\s+/);
   try {
-    const response = await fetch(gateway + '/v1/intention/', {
-      method: 'POST',
-      headers: { Authorization: 'Token ' + env.PAYMOB_SECRET_KEY, 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(12000),
-      body: JSON.stringify({
-        amount: order.total,
-        currency: order.currency,
-        payment_methods: integrationIds(env),
-        items: [{ name: 'UNLISTED™ order ' + order.id.slice(0, 8), amount: order.total, description: 'Clothing order', quantity: 1 }],
-        billing_data: {
-          first_name: first, last_name: last.join(' ') || first, street: order.address, building: 'NA',
-          floor: 'NA', apartment: 'NA', phone_number: order.phone, email: order.email,
-          city: order.city, state: order.shipping_label, country: 'EG', postal_code: 'NA',
-        },
-        special_reference: order.id,
-        expiration: remaining,
-        notification_url: paymentOrigin(env) + '/api/paymob',
-        redirection_url: paymentOrigin(env) + '/api/payment-return?order=' + order.id,
-      }),
-    });
-    if (!response.ok) throw new Error('Intention rejected');
-    const result = await response.json();
-    if (typeof result.client_secret !== 'string' || !/^\d+$/.test(String(result.intention_order_id))) {
-      throw new Error('Intention response incomplete');
-    }
+    const result = await createPaymobIntention(env, order, remaining);
     const url = new URL('/unifiedcheckout/', gateway);
     url.searchParams.set('publicKey', env.PAYMOB_PUBLIC_KEY);
     url.searchParams.set('clientSecret', result.client_secret);
