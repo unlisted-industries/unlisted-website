@@ -116,6 +116,7 @@ const paymentIssues = store ? paymentConfigurationIssues(env) : [];
     {paymentIssues.length > 0 && <div>
       <p class="muted">These settings are missing or invalid in the deployed Worker. Open Cloudflare → unlisted-website → Settings → Variables and Secrets.</p>
       <ul>{paymentIssues.map((name) => <li><code>{name}</code></li>)}</ul>
+      {env.PREVIEW_PAYMOB_BUILD_STATUS && <p class="muted">{env.PREVIEW_PAYMOB_BUILD_STATUS}</p>}
     </div>}
   </section>
   <button class="button primary">Save settings</button>
