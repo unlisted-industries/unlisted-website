@@ -7,6 +7,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "keep_vars": true,
+  "vars": { "PREVIEW_PAYMENT_ORIGIN": "https://unlisted-website.unlisted-yh.workers.dev" },
   "d1_databases": [
     {
       "binding": "DB",

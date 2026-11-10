@@ -4,22 +4,31 @@ import { StoreError } from './http.js';
 const gateway = 'https://accept.paymob.com';
 
 function integrationIds(env) {
-  const ids = (env.PAYMOB_INTEGRATION_IDS ?? '').split(',').map((id) => Number(id.trim()));
+  const setting = env.PAYMOB_INTEGRATION_IDS;
+  if (typeof setting !== 'string' || !/^\s*\d+\s*(,\s*\d+\s*)*$/.test(setting)) return [];
+  const ids = setting.split(',').map(Number);
   return ids.length && ids.every((id) => Number.isSafeInteger(id) && id > 0) ? ids : [];
 }
 
 export function paymentOrigin(env) {
   try {
-    const url = new URL(env.PAYMENT_ORIGIN);
+    const url = new URL(env.PAYMENT_ORIGIN ?? env.PREVIEW_PAYMENT_ORIGIN);
     return url.protocol === 'https:' && url.href === url.origin + '/' ? url.origin : null;
   } catch {
     return null;
   }
 }
 
+export function paymentConfigurationIssues(env) {
+  const required = ['PAYMOB_SECRET_KEY', 'PAYMOB_PUBLIC_KEY', 'PAYMOB_HMAC_SECRET'];
+  const issues = required.filter((name) => typeof env[name] !== 'string' || !env[name].trim());
+  if (!integrationIds(env).length) issues.push('PAYMOB_INTEGRATION_IDS');
+  if (!paymentOrigin(env)) issues.push('PAYMENT_ORIGIN');
+  return issues;
+}
+
 export function cardReady(env) {
-  return Boolean(env.PAYMOB_SECRET_KEY && env.PAYMOB_PUBLIC_KEY && env.PAYMOB_HMAC_SECRET &&
-    paymentOrigin(env) && integrationIds(env).length);
+  return paymentConfigurationIssues(env).length === 0;
 }
 
 export async function startPayment(env, order) {
