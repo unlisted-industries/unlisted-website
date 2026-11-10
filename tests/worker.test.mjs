@@ -240,7 +240,12 @@ test('Paymob starts hosted checkout and only a matching signed capture can mark 
   assert.equal((await browser()(sandboxPage, {})).headers.get('Location'), '/admin/login');
   assert.doesNotMatch((await admin(sandboxPage, {}, { Origin: 'https://other.invalid' })).headers.get('Location') ?? '', /accept\.paymob/);
   const orderCount = await db.prepare('SELECT count(*) AS total FROM orders').first('total');
-  assert.match((await admin(sandboxPage, {})).headers.get('Location'), /^https:\/\/accept\.paymob\.com\/unifiedcheckout\//);
+  const sandboxLaunch = await admin(sandboxPage, {});
+  assert.equal(sandboxLaunch.status, 200);
+  const launchPage = await sandboxLaunch.text();
+  assert.match(launchPage, /data-paymob-launch/);
+  assert.match(launchPage, /https:\/\/accept\.paymob\.com\/unifiedcheckout\//);
+  assert.match(launchPage, /Continue to Paymob/);
   const testIntent = intents.at(-1);
   const testCallback = new URL(testIntent.notification_url);
   const testStatus = new URL(testIntent.redirection_url);

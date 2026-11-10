@@ -3,14 +3,14 @@ import { env } from 'cloudflare:workers';
 import Admin from '../../layouts/Admin.astro';
 import { currentUser, limitRequest } from '../../lib/auth.js';
 import { isToken, makeToken } from '../../lib/db.js';
-import { assertSameOrigin, seeOther, StoreError } from '../../lib/http.js';
+import { assertSameOrigin, StoreError } from '../../lib/http.js';
 import { createSandboxCheckout, sandboxReady } from '../../lib/paymob.js';
 import { ensureSandboxRuns } from '../../lib/paymob-sandbox.js';
 
 const user = await currentUser(env, Astro, 'admin');
 if (!user) return Astro.redirect('/admin/login', 303);
 const ready = sandboxReady(env, Astro.url.origin);
-let error, run;
+let error, run, checkout;
 if (ready) {
   await ensureSandboxRuns(env.DB);
   if (Astro.request.method === 'POST') {
@@ -18,12 +18,12 @@ if (ready) {
       assertSameOrigin(Astro.request);
       await limitRequest(env.DB, Astro.request, 'paymob-sandbox', { limit: 5 });
       const id = makeToken(16);
-      const { providerOrder, checkout } = await createSandboxCheckout(env, id);
+      const { providerOrder, checkout: paymentLink } = await createSandboxCheckout(env, id);
       await env.DB.batch([
         env.DB.prepare('DELETE FROM paymob_sandbox_runs WHERE created_at < unixepoch() - 86400'),
         env.DB.prepare('INSERT INTO paymob_sandbox_runs (id, provider_order_id) VALUES (?, ?)').bind(id, providerOrder),
       ]);
-      return seeOther(checkout);
+      checkout = paymentLink;
     } catch (problem) {
       error = problem instanceof StoreError ? problem.message : 'Paymob sandbox checkout could not be started.';
     }
@@ -36,9 +36,15 @@ if (ready) {
   <div class="admin-heading"><div><p class="overline">PAYMENTS</p><h1>Paymob sandbox</h1></div></div>
   <section class="panel">
     <p>Run a 10 EGP test with Paymob sandbox credentials and sample billing details. Sandbox results are stored separately from store orders.</p>
-    {error && <p role="alert">{error}</p>}
+    {error && <p class="store-notice store-error" role="alert">{error}</p>}
     {run && <p role="status">{run.verified_at ? 'Sandbox payment confirmed. The signed Paymob callback passed verification.' : 'Waiting for the signed Paymob callback. Refresh to check again.'}</p>}
-    {ready ? <form method="post"><button class="button primary" type="submit">Open sandbox checkout</button></form>
+    {checkout ? <div>
+      <p role="status">Your 10 EGP test checkout is ready. If Paymob does not open automatically, use the link below.</p>
+      <a class="button primary" href={checkout} data-paymob-launch target="_blank" rel="noopener">Continue to Paymob</a>
+    </div> : ready ? <form method="post" action="/admin/paymob-test" data-paymob-start>
+      <button class="button primary" type="submit">Open sandbox checkout</button>
+      <p role="status" data-paymob-progress hidden>Preparing your test checkout…</p>
+    </form>
       : <p>Paymob sandbox checkout requires test credentials on the Cloudflare preview.</p>}
   </section>
 </Admin>
