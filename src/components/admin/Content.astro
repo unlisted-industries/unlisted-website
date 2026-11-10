@@ -24,7 +24,7 @@ const [store, pages, page, media] = await Promise.all([
 ]);
 const nav = store ? [...store.navigation, ...Array.from({ length: Math.min(3, 24 - store.navigation.length) }, () => ({}))] : [];
 const social = store ? [...store.socials, ...Array.from({ length: Math.min(2, 24 - store.socials.length) }, () => ({}))] : [];
-const title = content ? page?.title ?? (adding ? 'Add a page' : 'Pages') : mediaPage ? 'Media' : 'Store settings';
+const title = content ? page?.title ?? (adding ? 'Add a page' : 'Pages') : mediaPage ? 'Files' : 'Store settings';
 ---
 <div class="admin-heading"><div><p class="overline">STOREFRONT</p><h1>{title}</h1>
   {(page || adding) && <a class="quiet-link" href="/admin/content">← Back to pages</a>}</div>
@@ -64,7 +64,7 @@ const title = content ? page?.title ?? (adding ? 'Add a page' : 'Pages') : media
   </div><Pagination offset={offset} more={media.length > 25} /></section>
 </> : <form method="post" action="/admin/action" class="admin-form">
   <Fields op="settings" area="settings" />
-  <section class="panel">
+  <section class="panel" id="appearance">
     <h2>Brand and homepage</h2>
     <div class="form-grid">
       <label>Store name<input name="name" required maxlength="80" value={store.name} /></label>
@@ -79,7 +79,7 @@ const title = content ? page?.title ?? (adding ? 'Add a page' : 'Pages') : media
     </div>
     <label>Size guide<textarea name="size_guide" rows="4" maxlength="3000">{store.size_guide}</textarea></label>
   </section>
-  <section class="panel">
+  <section class="panel" id="navigation">
     <h2>Navigation</h2>
     <p class="muted">Use a store path or HTTPS link. Clear both fields to remove a link.</p>
     <div class="link-rows">

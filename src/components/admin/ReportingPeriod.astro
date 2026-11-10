@@ -1,0 +1,8 @@
+---
+import { reportingPeriods } from '../../lib/admin.js';
+const { days } = Astro.props;
+---
+<form method="get" class="inline-form">
+  <label>Reporting period <select name="days">{reportingPeriods.map((period) => <option selected={days === period} value={period}>Last {period} days</option>)}</select></label>
+  <button class="button">Apply</button>
+</form>

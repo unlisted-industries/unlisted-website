@@ -1,0 +1,71 @@
+---
+import { env } from 'cloudflare:workers';
+import Icon from './Icon.astro';
+import Metrics from './Metrics.astro';
+import ReportingPeriod from './ReportingPeriod.astro';
+import { emailReady } from '../../lib/auth.js';
+import { dashboard, reportDays } from '../../lib/admin.js';
+import { workspaceSections } from '../../lib/admin-navigation.js';
+import { getSettings } from '../../lib/catalog.js';
+import { checkoutReady } from '../../lib/checkout.js';
+import { cardReady } from '../../lib/paymob.js';
+import { money } from '../../lib/content.js';
+
+const { view, password = false } = Astro.props;
+const workspace = view === 'overview';
+const website = view === 'website';
+const days = reportDays(Astro.url);
+const [metrics, settings] = await Promise.all([
+  dashboard(env.DB, days), view === 'analytics' ? null : getSettings(Astro, env.DB),
+]);
+const conversion = metrics.visitors ? (100 * metrics.converted / metrics.visitors).toFixed(1) + '%' : '—';
+const cards = [
+  ['Sales', metrics.sales, 'Accepted orders'],
+  ['Paid revenue', money(metrics.revenue, true), 'Collected, excluding recorded refunds'],
+  ['Visitors', metrics.visitors, 'Unique browser visits'],
+  ['Conversion', conversion, 'Visitors who placed an accepted order'],
+];
+---
+<div class="admin-heading">
+  <div>
+    <p class="overline">{workspace ? 'WORKSPACE' : 'WEBSITE'}</p>
+    <h1>{workspace ? 'UNLISTED' : website ? 'Website overview' : 'Analytics'}</h1>
+    <p>{workspace ? 'Manage your store and business from one place.' : 'Orders, visitors and revenue recorded by your store.'}</p>
+  </div>
+  {!workspace && <ReportingPeriod days={days} />}
+</div>
+{workspace && <nav class="workspace-grid" aria-label="Business sections">
+  {workspaceSections.map(({ key, label, description }) => <a class="panel workspace-card" href={'/admin/' + key}>
+    <span class="workspace-card-title"><Icon name={key} />{label}<Icon name="arrow" /></span>
+    <small>{description}</small>
+  </a>)}
+</nav>}
+{workspace && <div class="admin-heading"><h2>Store performance</h2><ReportingPeriod days={days} /></div>}
+{website && <div class="admin-links panel">
+  <a class="button primary" href="/admin/products?new=1">Add product</a>
+  <a class="button" href="/admin/orders">Manage orders</a>
+  <a class="button" href="/" target="_blank" rel="noopener">View store ↗</a>
+</div>}
+<Metrics cards={cards} />
+<div class:list={[settings && 'admin-two']}>
+  <section class="panel">
+    <h2>Bestselling products</h2>
+    {metrics.products.length ? <div class="table-wrap"><table>
+      <thead><tr><th>Product</th><th>Units ordered</th><th>Item value</th></tr></thead>
+      <tbody>{metrics.products.map((row) => <tr><td>{row.title}</td><td>{row.units}</td><td>{money(row.gross, true)}</td></tr>)}</tbody>
+    </table></div> : <p class="muted">Accepted orders will appear here.</p>}
+    <p class="muted">Gross order value {money(metrics.gross, true)}</p>
+  </section>
+  {settings && <section class="panel">
+    <h2>Store status</h2>
+    <dl class="admin-kv">
+      <div><dt>Checkout</dt><dd><span class="pill">{checkoutReady(env, settings) ? 'Open' : 'Closed'}</span></dd></div>
+      <div><dt>New orders</dt><dd><a href="/admin/orders">{metrics.newOrders}</a></dd></div>
+      <div><dt>Variants awaiting stock count</dt><dd><a href="/admin/inventory">{metrics.unknownStock}</a></dd></div>
+      <div><dt>Late or duplicate captures</dt><dd><a href="/admin/orders">{metrics.latePayments}</a></dd></div>
+      <div><dt>Paymob credentials</dt><dd>{cardReady(env) ? 'Configured' : 'Pending'}</dd></div>
+      <div><dt>Email delivery</dt><dd>{emailReady(env) ? 'Configured' : 'Pending'}</dd></div>
+    </dl>
+    {password && <div class="admin-links store-status-links"><a href="/admin/password">Change password</a></div>}
+  </section>}
+</div>

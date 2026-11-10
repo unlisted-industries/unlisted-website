@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
-import { createHash, createHmac, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { isoCBOR } from '@simplewebauthn/server/helpers';
 import { convertV4MiniflareOptions, Miniflare } from 'miniflare';
 import { unstable_getMiniflareWorkerOptions, unstable_splitSqlQuery } from 'wrangler';
 import { paymobSignedValue } from '../src/lib/paymob.js';
@@ -11,6 +10,7 @@ import { paymobSignedValue } from '../src/lib/paymob.js';
 const origin = 'https://unlisted.test';
 const secret = 'local-test-hmac';
 const owner = 'owner@example.invalid';
+const ownerPassword = 'fixture-owner-password-one';
 const mail = [];
 const intents = [];
 let runtime, db, admin;
@@ -23,9 +23,7 @@ function browser() {
     let body;
     if (form) {
       headers.Origin ??= origin;
-      if (headers['Content-Type'] === 'application/json') {
-        body = JSON.stringify(form);
-      } else if (form instanceof FormData) {
+      if (form instanceof FormData) {
         const request = new Request(origin + path, { method: 'POST', body: form });
         headers['Content-Type'] = request.headers.get('Content-Type');
         body = new Uint8Array(await request.arrayBuffer());
@@ -117,8 +115,14 @@ test('owner sign-in is allowlisted and link consumption is single-use', async ()
   assert.equal(mail.length, 1);
   const token = /token=([a-f0-9]{64})/.exec(mail[0].text)[1];
   assert.equal((await admin('/admin/verify?token=' + token)).status, 200);
-  assert.equal((await admin('/admin/session', { action: 'confirm', token })).headers.get('Location'), '/admin');
+  assert.equal((await admin('/admin/session', { action: 'confirm', token })).headers.get('Location'), '/admin/password');
   assert.match((await outsider('/admin/session', { action: 'confirm', token })).headers.get('Location'), /expired/);
+  assert.match(await (await admin('/admin/password')).text(), /Set your password/);
+  const choose = { action: 'save-password', password: ownerPassword, password_confirmation: ownerPassword };
+  assert.match((await outsider('/admin/session', choose)).headers.get('Location'), /Sign\+in\+to\+set/);
+  assert.match((await admin('/admin/session', { ...choose, password_confirmation: 'fixture-password-mismatch' }))
+    .headers.get('Location'), /same\+new\+password/);
+  assert.equal((await admin('/admin/session', choose)).headers.get('Location'), '/admin?saved=1');
   for (const path of ['/admin', '/admin/products', '/admin/products?product=test-hoodie', '/admin/collections',
     '/admin/orders', '/admin/orders?source=shopify', '/admin/customers', '/admin/discounts', '/admin/shipping', '/admin/content',
     '/admin/media', '/admin/inbox', '/admin/settings']) {
@@ -127,6 +131,34 @@ test('owner sign-in is allowlisted and link consumption is single-use', async ()
   }
   const cookieAsCustomer = await admin('/account');
   assert.doesNotMatch(await cookieAsCustomer.text(), /owner@example\.invalid/);
+});
+
+test('the owner workspace keeps its sections private and links to live inventory', async () => {
+  const guest = browser();
+  const sections = ['website', 'inventory', 'analytics', 'online-store', 'finance', 'marketing', 'automations'];
+  for (const section of sections) {
+    const path = '/admin/' + section;
+    assert.equal((await guest(path)).headers.get('Location'), '/admin/login');
+    const response = await admin(path);
+    assert.equal(response.status, 200, path);
+    assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+  }
+  const overview = await (await admin('/admin')).text();
+  assert.match(overview, /aria-label="Business sections"/);
+  assert.match(overview, /href="\/admin\/manifest\.webmanifest"/);
+  const inventory = await (await admin('/admin/inventory?q=TEST+HOODIE')).text();
+  assert.match(inventory, /href="\/admin\/products\?product=test-hoodie&amp;variant=v#variant-v"/);
+  assert.match(inventory, /<td>1<\/td>/);
+  const product = await (await admin('/admin/products?product=test-hoodie&variant=v')).text();
+  assert.match(product, /id="variant-v" open/);
+  const manifestResponse = await guest('/admin/manifest.webmanifest');
+  assert.equal(manifestResponse.status, 200);
+  const manifest = await manifestResponse.json();
+  assert.equal(manifest.start_url, '/admin');
+  assert.equal(manifest.display, 'standalone');
+  for (const { src } of manifest.icons) {
+    assert.match((await guest(src)).headers.get('Content-Type'), /^image\/png/);
+  }
 });
 
 test('COD checkout prevents overselling and duplicate orders and restores stock on cancellation', async () => {
@@ -147,8 +179,9 @@ test('COD checkout prevents overselling and duplicate orders and restores stock 
   assert.equal(await db.prepare("SELECT uses FROM discounts WHERE code='COZY10'").first('uses'), 1);
   const adminOrder = await admin('/admin/orders?order=' + order);
   assert.match(await adminOrder.text(), /Test address/);
-  const analytics = await admin('/admin');
-  assert.match(await analytics.text(), /50\.0%/);
+  for (const section of ['', '/analytics?days=7', '/marketing']) {
+    assert.match(await (await admin('/admin' + section)).text(), /50\.0%/);
+  }
   const cancel = { op: 'order', area: 'orders', id: order, operation: 'cancel' };
   assert.match((await admin('/admin/action', cancel)).headers.get('Location'), /saved=1/);
   assert.match((await admin('/admin/action', cancel)).headers.get('Location'), /error=/);
@@ -187,6 +220,7 @@ test('Paymob starts hosted checkout and only a matching signed capture can mark 
   assert.equal((await callback(transaction)).status, 204);
   assert.equal((await callback(transaction)).status, 204);
   assert.equal(await db.prepare("SELECT payment_status FROM orders WHERE provider_order_id='8001'").first('payment_status'), 'paid');
+  assert.match(await (await admin('/admin/finance')).text(), /<strong>680 EGP<\/strong>/);
   assert.equal(await db.prepare('SELECT count(*) AS total FROM payment_events').first('total'), 1);
   assert.equal(mail.filter((message) => message.to[0] === 'cardbuyer@example.invalid').length, 1);
 });
@@ -276,62 +310,48 @@ test('storefront search, size chart and COZY matching item follow the supplied t
   assert.doesNotMatch(await (await web(sweats)).text(), /COMPLETE THE LOOK/);
 });
 
-test('owner passkeys require an owner session to enroll and a fresh verified assertion to sign in', async () => {
-  const passkey = (web, action, response) => web('/admin/passkey', { action, response }, { 'Content-Type': 'application/json' });
+test('owner password sign-in, password changes, and private recovery keep admin sessions protected', async () => {
   const web = browser();
-  assert.equal((await passkey(web, 'register-options')).status, 401);
-  assert.match(await (await web('/admin/login')).text(), /Sign in with a passkey/);
-  const optionsResponse = await passkey(admin, 'register-options');
-  assert.equal(optionsResponse.status, 200);
-  const registration = await optionsResponse.json();
-  const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
-  const { x, y } = publicKey.export({ format: 'jwk' });
-  const coseKey = new Map([[1, 2], [3, -7], [-1, 1], [-2, Buffer.from(x, 'base64url')], [-3, Buffer.from(y, 'base64url')]]);
-  const credentialId = randomBytes(32);
-  const id = credentialId.toString('base64url');
-  const rpIdHash = createHash('sha256').update(registration.rp.id).digest();
-  const authData = Buffer.concat([
-    rpIdHash, Buffer.from([0x45]), Buffer.alloc(20), Buffer.from([0, credentialId.length]),
-    credentialId, Buffer.from(isoCBOR.encode(coseKey)),
-  ]);
-  const attestation = isoCBOR.encode(new Map([['fmt', 'none'], ['attStmt', new Map()], ['authData', authData]]));
-  const clientData = (type, challenge, site = origin) => Buffer.from(JSON.stringify({ type, challenge, origin: site }));
-  const credential = { id, rawId: id, type: 'public-key', clientExtensionResults: {} };
-  const registered = {
-    ...credential,
-    response: {
-      clientDataJSON: clientData('webauthn.create', registration.challenge).toString('base64url'),
-      attestationObject: Buffer.from(attestation).toString('base64url'),
-      transports: ['internal'],
-    },
-  };
-  const enrollment = await passkey(admin, 'register-verify', registered);
-  assert.equal(enrollment.status, 200, await enrollment.text());
-  assert.equal((await passkey(admin, 'register-verify', registered)).status, 400);
-
-  function assertion(challenge, site) {
-    const client = clientData('webauthn.get', challenge, site);
-    const auth = Buffer.concat([rpIdHash, Buffer.from([0x05, 0, 0, 0, 1])]);
-    const signature = sign('sha256', Buffer.concat([auth, createHash('sha256').update(client).digest()]), privateKey);
-    return {
-      ...credential,
-      response: {
-        clientDataJSON: client.toString('base64url'), authenticatorData: auth.toString('base64url'),
-        signature: signature.toString('base64url'), userHandle: registration.user.id,
-      },
-    };
-  }
-  const wrongOrigin = await (await passkey(web, 'login-options')).json();
-  assert.equal((await passkey(web, 'login-verify', assertion(wrongOrigin.challenge, 'https://wrong.example'))).status, 401);
-  const login = await (await passkey(web, 'login-options')).json();
-  assert.equal(login.userVerification, 'required');
-  const signed = assertion(login.challenge, origin);
-  const verified = await passkey(web, 'login-verify', signed);
-  assert.equal(verified.status, 200, await verified.text());
-  assert.ok(verified.headers.getSetCookie().some((value) => value.startsWith('unlisted_admin=') &&
+  const login = await (await web('/admin/login')).text();
+  assert.match(login, /name="password" type="password"/);
+  assert.doesNotMatch(login, /passkey|name="email"/i);
+  const signIn = (client, password, headers) => client('/admin/session', { action: 'password', password }, headers);
+  assert.match((await signIn(web, 'wrong password')).headers.get('Location'), /Check\+your\+password/);
+  assert.equal((await web('/admin')).headers.get('Location'), '/admin/login');
+  assert.equal((await signIn(web, ownerPassword, { Origin: 'https://wrong.example' })).status, 403);
+  const signedIn = await signIn(web, ownerPassword);
+  assert.equal(signedIn.headers.get('Location'), '/admin');
+  assert.ok(signedIn.headers.getSetCookie().some((value) => value.startsWith('unlisted_admin=') &&
     /; HttpOnly/i.test(value) && /; Secure/i.test(value) && /; Path=\/admin/i.test(value)));
   assert.equal((await web('/admin')).status, 200);
-  await web('/admin/session', { action: 'logout' });
-  assert.equal((await passkey(web, 'login-verify', signed)).status, 400);
+  assert.match(await (await web('/admin/password')).text(), /Current password/);
+
+  const before = await db.prepare('SELECT salt, password_hash FROM admin_passwords').first();
+  assert.match(before.salt, /^[0-9a-f]{32}$/);
+  assert.match(before.password_hash, /^[0-9a-f]{64}$/);
+  const updated = 'fixture-owner-password-two';
+  const save = { action: 'save-password', password: updated, password_confirmation: updated };
+  assert.match((await web('/admin/session', { ...save, current_password: 'wrong password' }))
+    .headers.get('Location'), /Check\+your\+current\+password/);
+  assert.equal((await web('/admin/session', { ...save, current_password: ownerPassword })).headers.get('Location'), '/admin?saved=1');
+  assert.equal((await admin('/admin')).headers.get('Location'), '/admin/login');
+  const after = await db.prepare('SELECT salt, password_hash FROM admin_passwords').first();
+  assert.notEqual(before.salt, after.salt);
+  assert.notEqual(before.password_hash, after.password_hash);
+  assert.match((await signIn(browser(), ownerPassword)).headers.get('Location'), /Check\+your\+password/);
+  assert.equal((await signIn(browser(), updated)).headers.get('Location'), '/admin');
+
+  const recovery = browser();
+  await recovery('/admin/session', { action: 'request', email: owner });
+  const recoveryToken = /token=([a-f0-9]{64})/.exec(mail.at(-1).text)[1];
+  assert.equal((await recovery('/admin/session', { action: 'confirm', token: recoveryToken }))
+    .headers.get('Location'), '/admin/password');
+  assert.doesNotMatch(await (await recovery('/admin/password')).text(), /Current password/);
+  assert.equal((await recovery('/admin/session', {
+    action: 'save-password', password: ownerPassword, password_confirmation: ownerPassword,
+  })).headers.get('Location'), '/admin?saved=1');
   assert.equal((await web('/admin')).headers.get('Location'), '/admin/login');
+  assert.match((await browser()('/admin/session', { action: 'confirm', token: recoveryToken }))
+    .headers.get('Location'), /expired/);
+  assert.equal((await signIn(browser(), ownerPassword)).headers.get('Location'), '/admin');
 });

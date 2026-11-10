@@ -1,0 +1,18 @@
+---
+const controls = [
+  ['Homepage', 'Edit the store name, headline, and collection film.', '/admin/settings#appearance'],
+  ['Navigation', 'Manage the storefront menus and social links.', '/admin/settings#navigation'],
+  ['Pages', 'Edit your About, policies, and other store pages.', '/admin/content'],
+  ['Files', 'Upload and manage store images and videos.', '/admin/media'],
+];
+---
+<div class="admin-heading">
+  <div><p class="overline">WEBSITE</p><h1>Online Store</h1><p>Manage the storefront your customers see.</p></div>
+  <a class="button primary" href="/" target="_blank" rel="noopener">View store ↗</a>
+</div>
+<section class="panel">
+  <h2>Storefront content</h2>
+  <ul class="store-controls-list">
+    {controls.map(([label, description, path]) => <li><div><strong>{label}</strong><p class="muted">{description}</p></div><a class="button" href={path}>Manage {label.toLowerCase()}</a></li>)}
+  </ul>
+</section>
