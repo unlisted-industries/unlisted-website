@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "unlisted-website",
+  "account_id": "e9b1e1e2a83e75388d8fd84778fd5c78",
   "main": "./src/worker.js",
   "compatibility_date": "2026-11-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -9,8 +10,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "unlisted-store",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_name": "unlisted-store-staging",
+      "database_id": "6fa7088a-3cf8-487d-a7ea-2d22ef04c490",
       "migrations_dir": "migrations"
     }
   ],

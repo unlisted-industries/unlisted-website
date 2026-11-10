@@ -19,9 +19,9 @@ The catalog importer copies images and both collection films to R2 and adds six 
 
 ## Deploy to the existing Worker
 
-1. Authorize GitHub write access for unlisted-industries/unlisted-website and Cloudflare access for the account containing unlisted-website. Provision the D1 database and R2 bucket or confirm the existing resources. Default names are unlisted-store and unlisted-store-media.
-2. Set CLOUDFLARE_D1_DATABASE_ID in the deployment environment. Use CLOUDFLARE_D1_DATABASE_NAME and CLOUDFLARE_R2_BUCKET if the resources use different names. Use Cloudflare CLI sign-in or account-scoped CI secrets.
-3. Run the one-time bootstrap.
+The checked-in bindings target the existing UNLISTED Worker, the `unlisted-store-staging` D1 database, and the `unlisted-store-media` R2 bucket. Cloudflare Workers Builds compiles Astro during dependency installation so the default Wrangler deploy command uses the generated Worker configuration. The password release can initialize its two new tables in the existing database.
+
+For a manual deployment, sign in with Wrangler or supply account-scoped CI credentials. Override `CLOUDFLARE_D1_DATABASE_ID`, `CLOUDFLARE_D1_DATABASE_NAME`, and `CLOUDFLARE_R2_BUCKET` when using a different staging database and bucket. Use `--bootstrap-catalog` only to initialize a new database.
 
 ~~~sh
 npm ci

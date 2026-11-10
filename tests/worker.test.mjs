@@ -11,6 +11,7 @@ const origin = 'https://unlisted.test';
 const secret = 'local-test-hmac';
 const owner = 'owner@example.invalid';
 const ownerPassword = 'fixture-owner-password-one';
+const ownerSchema = '0006_owner_passwords.sql';
 const mail = [];
 const intents = [];
 let runtime, db, admin;
@@ -71,7 +72,8 @@ before(async () => {
   }));
   db = await runtime.getD1Database('DB');
   const migrations = (await readdir(new URL('../migrations/', import.meta.url))).filter((name) => name.endsWith('.sql')).sort();
-  for (const name of migrations) {
+  // Model the hosted store before its first password release.
+  for (const name of migrations.filter((file) => file !== ownerSchema)) {
     const migration = await readFile(new URL('../migrations/' + name, import.meta.url), 'utf8');
     await db.batch(unstable_splitSqlQuery(migration).map((query) => db.prepare(query)));
   }
@@ -123,6 +125,10 @@ test('owner sign-in is allowlisted and link consumption is single-use', async ()
   assert.match((await admin('/admin/session', { ...choose, password_confirmation: 'fixture-password-mismatch' }))
     .headers.get('Location'), /same\+new\+password/);
   assert.equal((await admin('/admin/session', choose)).headers.get('Location'), '/admin?saved=1');
+  const migration = await readFile(new URL('../migrations/' + ownerSchema, import.meta.url), 'utf8');
+  await db.batch(unstable_splitSqlQuery(migration).map((query) => db.prepare(query)));
+  assert.equal(await db.prepare('SELECT count(*) AS count FROM admin_passwords').first('count'), 1);
+  assert.equal(await db.prepare('SELECT count(*) AS count FROM admin_password_setups').first('count'), 0);
   for (const path of ['/admin', '/admin/products', '/admin/products?product=test-hoodie', '/admin/collections',
     '/admin/orders', '/admin/orders?source=shopify', '/admin/customers', '/admin/discounts', '/admin/shipping', '/admin/content',
     '/admin/media', '/admin/inbox', '/admin/settings']) {

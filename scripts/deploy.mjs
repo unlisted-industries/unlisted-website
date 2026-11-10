@@ -45,7 +45,9 @@ function wrangler(args) {
   run('node_modules/wrangler/bin/wrangler.js', [...args, '--config', target]);
 }
 
-if (!dryRun) {
+// Workers Builds uses the already initialized staging database. Its default token can
+// deploy the Worker, and the Worker prepares the new password tables using its D1 binding.
+if (!dryRun && (bootstrap || process.env.WORKERS_CI !== '1')) {
   wrangler(['d1', 'migrations', 'apply', 'DB', '--remote']);
   if (bootstrap) run('scripts/import-catalog.mjs', ['--remote', '--config', target]);
 }

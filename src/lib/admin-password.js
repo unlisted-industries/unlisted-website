@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
 import { timingSafeEqual } from 'node:crypto';
 import { adminEmails, currentUser, limitRequest, openAdminSession } from './auth.js';
+import { ensureOwnerPasswordSchema } from './admin-password-schema.js';
 import { isToken, makeToken, sha256, statements, unixNow } from './db.js';
 import { emailValue, StoreError } from './http.js';
 
@@ -9,7 +10,8 @@ export function passwordsReady(env, url) {
     env.ADMIN_ORIGIN === url.origin && adminEmails(env).length > 0;
 }
 
-export function passwordRecord(db, email) {
+export async function passwordRecord(db, email) {
+  await ensureOwnerPasswordSchema(db);
   return db.prepare(`SELECT c.id, c.email, p.salt, p.password_hash
     FROM admin_passwords p JOIN customers c ON c.id = p.customer_id WHERE c.email = ?`).bind(email).first();
 }
@@ -70,7 +72,8 @@ export async function saveOwnerPassword(env, context, form) {
     [`INSERT INTO admin_passwords (customer_id, salt, password_hash)
       SELECT s.customer_id, ?, ? FROM sessions s
       WHERE s.digest = ? AND s.customer_id = ? AND s.purpose = 'admin' AND s.expires_at > unixepoch()
-        AND (? = 0 OR s.password_change_until > unixepoch())
+        AND (? = 0 OR EXISTS (SELECT 1 FROM admin_password_setups
+          WHERE session_digest = s.digest AND expires_at > unixepoch()))
         AND (SELECT password_hash FROM admin_passwords WHERE customer_id = s.customer_id) IS ?
       ON CONFLICT (customer_id) DO UPDATE SET salt = excluded.salt, password_hash = excluded.password_hash`,
     salt, hash, await sha256(session), user.id, Number(canReset), previous?.password_hash ?? null],

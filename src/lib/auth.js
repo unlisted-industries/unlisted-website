@@ -1,5 +1,6 @@
 import { isToken, makeToken, sha256, statements, unixNow } from './db.js';
 import { clearCookie, setCookie, StoreError } from './http.js';
+import { ensureOwnerPasswordSchema } from './admin-password-schema.js';
 
 const loginWindow = 15 * 60;
 const accounts = {
@@ -83,6 +84,8 @@ export async function confirmLogin(env, context, purpose, raw) {
   if (!token || (purpose === 'admin' && !canAdmin(env, token.email))) {
     throw new StoreError('This link expired or was already used. Request a new one.');
   }
+  const owner = purpose === 'admin';
+  if (owner) await ensureOwnerPasswordSchema(env.DB);
   const settings = accounts[purpose];
   const session = makeToken(32);
   const sessionDigest = await sha256(session);
@@ -92,10 +95,12 @@ export async function confirmLogin(env, context, purpose, raw) {
     [`INSERT INTO customers (id, email)
       SELECT ?, email FROM login_tokens WHERE digest = ? AND purpose = ? AND expires_at > unixepoch()
       ON CONFLICT (email) DO NOTHING`, makeToken(), digest, purpose],
-    [`INSERT INTO sessions (digest, customer_id, purpose, expires_at, password_change_until)
-      SELECT ?, c.id, t.purpose, ?, ? FROM login_tokens t JOIN customers c ON c.email = t.email
+    [`INSERT INTO sessions (digest, customer_id, purpose, expires_at)
+      SELECT ?, c.id, t.purpose, ? FROM login_tokens t JOIN customers c ON c.email = t.email
       WHERE t.digest = ? AND t.purpose = ? AND t.expires_at > unixepoch()`,
-    sessionDigest, unixNow() + settings.age, purpose === 'admin' ? unixNow() + loginWindow : 0, digest, purpose],
+    sessionDigest, unixNow() + settings.age, digest, purpose],
+    ...(owner ? [[`INSERT INTO admin_password_setups (session_digest, expires_at)
+      SELECT digest, ? FROM sessions WHERE digest = ?`, unixNow() + loginWindow, sessionDigest]] : []),
     ['DELETE FROM login_tokens WHERE digest = ? AND purpose = ?', digest, purpose],
     ['DELETE FROM sessions WHERE digest = ? AND purpose = ?', oldDigest, purpose],
   ]);
@@ -107,10 +112,14 @@ export async function confirmLogin(env, context, purpose, raw) {
 export async function currentUser(env, context, purpose = 'account') {
   const raw = context.cookies.get(accounts[purpose].cookie)?.value;
   if (!isToken(raw, 32)) return null;
-  const user = await env.DB.prepare(`SELECT c.id, c.name, c.email, s.password_change_until FROM sessions s JOIN customers c ON c.id = s.customer_id
+  const owner = purpose === 'admin';
+  if (owner) await ensureOwnerPasswordSchema(env.DB);
+  const setupExpiry = owner ? 'coalesce((SELECT expires_at FROM admin_password_setups WHERE session_digest = s.digest), 0)' : '0';
+  const user = await env.DB.prepare(`SELECT c.id, c.name, c.email, ${setupExpiry} AS password_change_until
+    FROM sessions s JOIN customers c ON c.id = s.customer_id
     WHERE s.digest = ? AND s.purpose = ? AND s.expires_at > unixepoch()`)
     .bind(await sha256(raw), purpose).first();
-  return user && (purpose !== 'admin' || canAdmin(env, user.email)) ? user : null;
+  return user && (!owner || canAdmin(env, user.email)) ? user : null;
 }
 
 export async function openAdminSession(env, context, user, passwordHash) {

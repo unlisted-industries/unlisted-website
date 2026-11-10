@@ -1,6 +1,6 @@
 import { confirmLogin, logout, requestLogin } from './auth.js';
 import { passwordsReady, saveOwnerPassword, signInWithPassword } from './admin-password.js';
-import { emailValue, formData, formError, seeOther, textValue } from './http.js';
+import { emailValue, formData, formError, seeOther, StoreError, textValue } from './http.js';
 
 export async function sessionPost(env, context, purpose) {
   const login = purpose === 'admin' ? '/admin/login' : '/account';
@@ -18,8 +18,11 @@ export async function sessionPost(env, context, purpose) {
     }
     switch (form.get('action')) {
       case 'confirm': {
+        if (purpose === 'admin' && !passwordsReady(env, context.url)) {
+          throw new StoreError('Owner password setup is unavailable on this address.', 503);
+        }
         const signedIn = await confirmLogin(env, context, purpose, textValue(form, 'token', 64));
-        return seeOther(purpose === 'admin' && passwordsReady(env, context.url) ? '/admin/password' : signedIn);
+        return seeOther(purpose === 'admin' ? '/admin/password' : signedIn);
       }
       case 'logout':
         return seeOther(await logout(env, context, purpose));
