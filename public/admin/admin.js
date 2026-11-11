@@ -32,18 +32,6 @@ if (activation) {
   }
 }
 
-const paymobStart = document.querySelector('[data-paymob-start]');
-if (paymobStart) {
-  paymobStart.addEventListener('submit', () => {
-    const button = paymobStart.querySelector('button');
-    button.disabled = true;
-    button.textContent = 'Preparing checkout…';
-    paymobStart.querySelector('[data-paymob-progress]').hidden = false;
-  });
-}
-const paymobLaunch = document.querySelector('[data-paymob-launch]');
-if (paymobLaunch) window.location.assign(paymobLaunch.href);
-
 const menu = document.querySelector('[data-admin-menu]');
 if (menu) {
   menu.hidden = false;

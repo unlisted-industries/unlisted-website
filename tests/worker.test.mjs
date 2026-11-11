@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { convertV4MiniflareOptions, Miniflare } from 'miniflare';
 import { unstable_getMiniflareWorkerOptions, unstable_splitSqlQuery } from 'wrangler';
-import { paymobSignedValue } from '../src/lib/paymob.js';
+import { createSandboxCheckout, paymentConfigurationIssues, paymentIntegrationIds, paymobSignedValue, sandboxReady } from '../src/lib/paymob.js';
 
 const origin = 'https://unlisted.test';
 const secret = 'local-test-hmac';
@@ -55,7 +55,8 @@ before(async () => {
     bindings: {
       CHECKOUT_ENABLED: 'true', ADMIN_EMAILS: owner, ADMIN_ORIGIN: origin, EMAIL_FROM: 'UNLISTED <sender@example.invalid>',
       RESEND_API_KEY: 'test-email-key', PAYMOB_SECRET_KEY: 'sk_test_fixture', PAYMOB_PUBLIC_KEY: 'pk_test_fixture',
-      PAYMOB_INTEGRATION_IDS: '101', PAYMOB_HMAC_SECRET: secret, PAYMENT_ORIGIN: origin, PREVIEW_PAYMENT_ORIGIN: origin,
+      PAYMOB_INTEGRATION_IDS: '999', PAYMOB_TEST_INTEGRATION_IDS: '101', PAYMOB_HMAC_SECRET: secret,
+      PAYMENT_ORIGIN: origin, PREVIEW_PAYMENT_ORIGIN: origin,
     },
     async outboundService(request) {
       const url = new URL(request.url);
@@ -211,6 +212,7 @@ test('Paymob starts hosted checkout and only a matching signed capture can mark 
   assert.equal(checkout.pathname, '/unifiedcheckout/');
   assert.equal(intents.length, 1);
   assert.equal(intents[0].amount, 68000);
+  assert.deepEqual(intents[0].payment_methods, [101]);
   assert.equal((await buyer('/api/checkout', request)).headers.get('Location'), checkout.href);
   assert.equal(intents.length, 1);
   const transaction = {
@@ -505,4 +507,86 @@ test('owner password sign-in, password changes, and private recovery keep admin 
   assert.match((await browser()('/admin/session', { action: 'confirm', token: recoveryToken }))
     .headers.get('Location'), /expired/);
   assert.equal((await signIn(browser(), ownerPassword)).headers.get('Location'), '/admin');
+});
+
+test('website test integration is selected only with matching test keys', async () => {
+  const testEnv = {
+    PAYMOB_SECRET_KEY: 'egy_sk_test_fixture', PAYMOB_PUBLIC_KEY: 'egy_pk_test_fixture',
+    PAYMOB_HMAC_SECRET: secret, PAYMOB_INTEGRATION_IDS: '999', PAYMOB_TEST_INTEGRATION_IDS: '101',
+    PAYMENT_ORIGIN: origin, PREVIEW_PAYMENT_ORIGIN: origin,
+  };
+  assert.deepEqual(paymentIntegrationIds(testEnv), [101]);
+  const { PAYMOB_TEST_INTEGRATION_IDS, ...fallback } = testEnv;
+  assert.deepEqual(paymentIntegrationIds(fallback), [999]);
+  assert.deepEqual(paymentIntegrationIds({ ...testEnv, PAYMOB_TEST_INTEGRATION_IDS: 'invalid' }), []);
+  assert.deepEqual(paymentConfigurationIssues({ ...testEnv, PAYMOB_TEST_INTEGRATION_IDS: '' }), ['PAYMOB_TEST_INTEGRATION_IDS']);
+  const liveEnv = { ...testEnv, PAYMOB_SECRET_KEY: 'egy_sk_live_fixture', PAYMOB_PUBLIC_KEY: 'egy_pk_live_fixture' };
+  assert.deepEqual(paymentIntegrationIds(liveEnv), [999]);
+  assert.equal(sandboxReady(liveEnv, origin), false);
+  assert.equal(sandboxReady(testEnv, 'https://other.invalid'), false);
+  await assert.rejects(createSandboxCheckout(liveEnv, 'a'.repeat(32)), /unavailable/);
+  await assert.rejects(createSandboxCheckout(testEnv, 'a'.repeat(32), 'https://other.invalid'), /unavailable/);
+});
+
+test('public payment review verifies sandbox callbacks without opening native checkout or changing store data', async () => {
+  const saved = await db.prepare('SELECT checkout_enabled, cod_enabled, card_enabled FROM store_settings WHERE id=1').first();
+  await db.prepare('UPDATE store_settings SET checkout_enabled=0, cod_enabled=0, card_enabled=0 WHERE id=1').run();
+  const snapshot = async () => ({
+    orders: await db.prepare('SELECT count(*) AS n FROM orders').first('n'),
+    customers: await db.prepare('SELECT count(*) AS n FROM customers').first('n'),
+    visits: await db.prepare('SELECT count(*) AS n FROM visits').first('n'),
+    variants: (await db.prepare('SELECT id, inventory FROM variants ORDER BY id').all()).results,
+  });
+  const before = await snapshot();
+  const reviewer = browser();
+  const page = await reviewer('/payment-test');
+  assert.equal(page.status, 200);
+  assert.equal(page.headers.get('Cache-Control'), 'private, no-store');
+  const html = await page.text();
+  assert.match(html, /Test mode only/);
+  assert.match(html, /5123456789012346/);
+  assert.doesNotMatch(html, /sk_test_fixture|local-test-hmac|owner@example/);
+  assert.equal((await runtime.dispatchFetch('https://other.invalid/payment-test')).status, 404);
+  const attempts = intents.length;
+  assert.equal((await reviewer('/payment-test', {}, { Origin: 'https://other.invalid' })).status, 403);
+  assert.equal(intents.length, attempts);
+  const result = await reviewer('/payment-test', {});
+  assert.equal(result.status, 200);
+  assert.match(await result.text(), /Continue to Paymob/);
+  const intent = intents.at(-1);
+  assert.deepEqual(intent.payment_methods, [101]);
+  assert.equal(intent.amount, 1000);
+  assert.equal(intent.billing_data.email, 'unlisted-sandbox@example.com');
+  const status = new URL(intent.redirection_url);
+  assert.equal(status.pathname, '/payment-test');
+  const url = new URL(intent.notification_url);
+  const providerOrder = await db.prepare('SELECT provider_order_id FROM paymob_sandbox_runs WHERE id=?').bind(url.searchParams.get('sandbox')).first('provider_order_id');
+  const transaction = {
+    amount_cents: 1000, created_at: '2026-11-11T12:00:00Z', currency: 'EGP', error_occured: false,
+    has_parent_transaction: false, id: 7001, integration_id: 101, is_3d_secure: true, is_auth: false,
+    is_capture: false, is_refunded: false, is_standalone_payment: true, is_voided: false,
+    order: { id: Number(providerOrder) }, owner: 1, pending: false,
+    source_data: { pan: '2346', sub_type: 'MasterCard', type: 'card' }, success: true,
+  };
+  const callback = (data, hmac = createHmac('sha512', secret).update(paymobSignedValue(data)).digest('hex')) => {
+    url.searchParams.set('hmac', hmac);
+    return runtime.dispatchFetch(url.href, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'TRANSACTION', obj: data }) });
+  };
+  assert.equal((await callback(transaction, '0'.repeat(128))).status, 401);
+  assert.equal((await callback({ ...transaction, integration_id: 999 })).status, 409);
+  assert.match(await (await reviewer(status.pathname + status.search)).text(), /Waiting for the signed/);
+  assert.equal((await callback(transaction)).status, 204);
+  assert.equal((await callback(transaction)).status, 204);
+  assert.match(await (await reviewer(status.pathname + status.search)).text(), /Sandbox payment confirmed/);
+  assert.deepEqual(await snapshot(), before);
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await reviewer('/payment-test', {}, { 'CF-Connecting-IP': '192.0.2.99' })).status, 200);
+  }
+  const limitedAt = intents.length;
+  assert.equal((await reviewer('/payment-test', {}, { 'CF-Connecting-IP': '192.0.2.99' })).status, 429);
+  assert.equal(intents.length, limitedAt);
+  const gates = await db.prepare('SELECT checkout_enabled, cod_enabled, card_enabled FROM store_settings WHERE id=1').first();
+  assert.deepEqual(gates, { checkout_enabled: 0, cod_enabled: 0, card_enabled: 0 });
+  await db.prepare('UPDATE store_settings SET checkout_enabled=?, cod_enabled=?, card_enabled=? WHERE id=1')
+    .bind(saved.checkout_enabled, saved.cod_enabled, saved.card_enabled).run();
 });

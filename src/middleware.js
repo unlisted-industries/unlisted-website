@@ -4,7 +4,7 @@ import { isToken, makeToken } from './lib/db.js';
 import { getSettings } from './lib/catalog.js';
 import { setCookie } from './lib/http.js';
 
-const protectedPaths = /^(?:\/(?:admin|account|orders|api|cart|checkout)(?:\/|$))/;
+const protectedPaths = /^(?:\/(?:admin|account|orders|api|cart|checkout|payment-test)(?:\/|$))/;
 const storefrontPaths = /^\/(?:$|products\/|collections\/|pages\/)/;
 
 export const onRequest = defineMiddleware(async (context, next) => {

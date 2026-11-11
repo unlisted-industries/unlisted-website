@@ -1,0 +1,29 @@
+---
+const { ready, error, run, checkout, action, integrations } = Astro.props;
+---
+<section class="panel">
+  <p>Run a 10 EGP sandbox payment with sample billing details. No real money is charged. This test does not create a store order or change inventory.</p>
+  {ready && <p>Test card integration: <code>{integrations.join(', ')}</code>.</p>}
+  {error && <p class="store-notice store-error" role="alert">{error}</p>}
+  {run && <p class="store-notice" role="status">{run.verified_at ? 'Sandbox payment confirmed. The signed Paymob callback passed verification.' : 'Waiting for the signed Paymob callback. Refresh to check again.'}</p>}
+  {checkout ? <div>
+    <p role="status">Your 10 EGP test checkout is ready. If Paymob does not open automatically, use the link below.</p>
+    <a class="button primary btn" href={checkout} data-paymob-launch target="_blank" rel="noopener">Continue to Paymob</a>
+  </div> : ready ? <>
+    <details>
+      <summary>Test card details</summary>
+      <p>Use the sandbox card below. Do not enter a real card.</p>
+      <dl class="store-totals">
+        <div><dt>Card number</dt><dd><code>5123456789012346</code></dd></div>
+        <div><dt>Cardholder name</dt><dd>Test Account</dd></div>
+        <div><dt>Expiry</dt><dd>01/39</dd></div>
+        <div><dt>CVV</dt><dd>123</dd></div>
+      </dl>
+    </details>
+    <form method="post" action={action} data-paymob-start>
+      <button class="button primary btn" type="submit">Open sandbox checkout</button>
+      <p role="status" data-paymob-progress hidden>Preparing your test checkout…</p>
+    </form>
+  </> : <p>Paymob sandbox checkout requires test credentials on the Cloudflare preview.</p>}
+</section>
+<script is:inline src="/theme/paymob-sandbox.js" defer></script>

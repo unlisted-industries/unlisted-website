@@ -3,8 +3,18 @@ import { StoreError } from './http.js';
 
 const gateway = 'https://accept.paymob.com';
 
-function integrationIds(env) {
-  const setting = env.PAYMOB_INTEGRATION_IDS;
+function testCredentials(env) {
+  return /^(?:egy(?:pt)?_)?sk_?test[_-]/i.test(env.PAYMOB_SECRET_KEY ?? '') &&
+    /^(?:egy(?:pt)?_)?pk_?test[_-]/i.test(env.PAYMOB_PUBLIC_KEY ?? '');
+}
+
+function integrationSetting(env) {
+  return testCredentials(env) && env.PAYMOB_TEST_INTEGRATION_IDS !== undefined
+    ? 'PAYMOB_TEST_INTEGRATION_IDS' : 'PAYMOB_INTEGRATION_IDS';
+}
+
+export function paymentIntegrationIds(env) {
+  const setting = env[integrationSetting(env)];
   if (typeof setting !== 'string' || !/^\s*\d+\s*(,\s*\d+\s*)*$/.test(setting)) return [];
   const ids = setting.split(',').map(Number);
   return ids.length && ids.every((id) => Number.isSafeInteger(id) && id > 0) ? ids : [];
@@ -22,7 +32,7 @@ export function paymentOrigin(env) {
 export function paymentConfigurationIssues(env) {
   const required = ['PAYMOB_SECRET_KEY', 'PAYMOB_PUBLIC_KEY', 'PAYMOB_HMAC_SECRET'];
   const issues = required.filter((name) => typeof env[name] !== 'string' || !env[name].trim());
-  if (!integrationIds(env).length) issues.push('PAYMOB_INTEGRATION_IDS');
+  if (!paymentIntegrationIds(env).length) issues.push(integrationSetting(env));
   if (!paymentOrigin(env)) issues.push('PAYMENT_ORIGIN');
   return issues;
 }
@@ -40,7 +50,7 @@ async function createPaymobIntention(env, order, remaining, callbacks = {}) {
     body: JSON.stringify({
       amount: order.total,
       currency: order.currency,
-      payment_methods: integrationIds(env),
+      payment_methods: paymentIntegrationIds(env),
       items: [{ name: 'UNLISTED™ order ' + order.id.slice(0, 8), amount: order.total, description: 'Clothing order', quantity: 1 }],
       billing_data: {
         first_name: first, last_name: last.join(' ') || first, street: order.address, building: 'NA',
@@ -70,14 +80,17 @@ function hostedCheckout(env, intention) {
 
 export function sandboxReady(env, origin) {
   return cardReady(env) && origin === env.PREVIEW_PAYMENT_ORIGIN && origin === paymentOrigin(env) &&
-    /^(?:egy(?:pt)?_)?sk_?test[_-]/i.test(env.PAYMOB_SECRET_KEY) && /^(?:egy(?:pt)?_)?pk_?test[_-]/i.test(env.PAYMOB_PUBLIC_KEY);
+    testCredentials(env);
 }
 
-export async function createSandboxCheckout(env, id) {
+export async function createSandboxCheckout(env, id, returnPath = '/admin/paymob-test') {
+  if (!sandboxReady(env, paymentOrigin(env)) || !['/admin/paymob-test', '/payment-test'].includes(returnPath)) {
+    throw new StoreError('Paymob sandbox checkout is unavailable.', 404);
+  }
   const intention = await createPaymobIntention(env, {
     id, total: 1000, currency: 'EGP', name: 'UNLISTED Sandbox', address: 'Sandbox address',
     phone: '01010101010', email: 'unlisted-sandbox@example.com', city: 'Cairo', shipping_label: 'Cairo',
-  }, 900, { notification: '/api/paymob?sandbox=' + id, redirect: '/admin/paymob-test?run=' + id });
+  }, 900, { notification: '/api/paymob?sandbox=' + id, redirect: returnPath + '?run=' + id });
   if (!/^pi_test_/.test(intention.id) || !/(^|_)csk_test_/.test(intention.client_secret)) {
     throw new StoreError('Paymob did not return a sandbox checkout.', 502);
   }
@@ -143,7 +156,7 @@ export function capturedTransaction(transaction) {
 }
 
 export async function recordCapture(env, transaction) {
-  if (!capturedTransaction(transaction) || !integrationIds(env).includes(Number(transaction.integration_id))) return null;
+  if (!capturedTransaction(transaction) || !paymentIntegrationIds(env).includes(Number(transaction.integration_id))) return null;
   const providerId = String(transaction.order?.id);
   const txn = String(transaction.id);
   if (!/^\d+$/.test(providerId) || !/^\d+$/.test(txn)) throw new StoreError('Invalid transaction.', 400);

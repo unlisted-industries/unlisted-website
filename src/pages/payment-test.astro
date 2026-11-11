@@ -1,0 +1,17 @@
+---
+import { env } from 'cloudflare:workers';
+import Store from '../layouts/Store.astro';
+import PaymobSandbox from '../components/PaymobSandbox.astro';
+import { paymentIntegrationIds, sandboxReady } from '../lib/paymob.js';
+import { prepareSandboxPage } from '../lib/paymob-sandbox.js';
+
+if (!sandboxReady(env, Astro.url.origin)) return new Response('Not found', { status: 404 });
+const state = await prepareSandboxPage(env, Astro, '/payment-test');
+---
+<Store title="Paymob payment test" noIndex>
+  <section class="store-checkout">
+    <h1>PAYMENT TEST</h1>
+    <p>UNLISTED · Paymob integration review · Test mode only</p>
+    <PaymobSandbox {...state} action="/payment-test" integrations={paymentIntegrationIds(env)} />
+  </section>
+</Store>
