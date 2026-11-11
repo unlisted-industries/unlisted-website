@@ -37,7 +37,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   if (headers.get('Content-Type')?.includes('text/html')) {
     headers.set('Content-Security-Policy',
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' https://accept.paymob.com; object-src 'none'");
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' https://accept.paymob.com https://eg.checkout.paymob.com; object-src 'none'");
   }
   if (protectedPaths.test(url.pathname)) headers.set('Cache-Control', 'private, no-store');
   if (url.hostname.endsWith('.workers.dev') || protectedPaths.test(url.pathname)) {
