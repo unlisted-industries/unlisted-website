@@ -3,8 +3,11 @@ import { mediaUrl, money } from '../lib/content.js';
 const { product, eager = false } = Astro.props;
 const url = product.preorder ? '/?preorder=' + product.handle : '/products/' + product.handle;
 const image = product.images[0];
-const imageSource = image?.key === 'shop/unlisted-cozy-fold-grey-1.png'
-  ? '/theme/catalog/fold-over-grey-cutout-v2.png' : mediaUrl(image?.key);
+const catalogImages = {
+  'shop/unlisted-cozy-fold-grey-1.png': '/theme/catalog/fold-over-grey-cutout-v2.png',
+  'shop/unlisted-cozy-straight-grey-1.png': '/theme/catalog/straight-leg-grey-cutout.png',
+};
+const imageSource = catalogImages[image?.key] ?? mediaUrl(image?.key);
 const price = product.variants.length ? Math.min(...product.variants.map((variant) => variant.price)) : null;
 ---
 <a class="drop-card" href={url} data-category={product.category}>
