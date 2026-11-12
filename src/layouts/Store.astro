@@ -28,6 +28,7 @@ const support = supportOrder.flatMap((url) => navigation.filter((link) => link.u
     <link rel="stylesheet" href="/theme/product-upsell.css" />
     <link rel="stylesheet" href="/theme/store.css" />
     <script is:inline src="/theme/store.js" defer></script>
+    {Boolean(store.analytics_enabled) && <script is:inline src="/theme/visitors.js" defer></script>}
   </head>
   <body>
     <div class="shell">
@@ -51,7 +52,6 @@ const support = supportOrder.flatMap((url) => navigation.filter((link) => link.u
             <div class="menu-top"><span>{store.name}</span><button class="close" type="button" data-close-menu aria-label="Close menu">×</button></div>
             <nav class="menu-nav" aria-label="Main menu">
               {collections.length > 0 && <details><summary>Collections</summary>{collections.map((link) => <a href={link.url}>{link.label}</a>)}</details>}
-              <button type="button" data-open-size-guide>Size Guide</button>
               {navigation.map((link) => <a href={link.url}>{link.label}</a>)}
             </nav>
           </div>

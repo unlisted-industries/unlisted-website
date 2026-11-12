@@ -11,7 +11,7 @@ const origin = 'https://unlisted.test';
 const secret = 'local-test-hmac';
 const owner = 'owner@example.invalid';
 const ownerPassword = 'fixture-owner-password-one';
-const runtimeSchemas = new Set(['0006_owner_passwords.sql', '0007_order_returns.sql', '0008_shopify_import.sql', '0009_paymob_sandbox.sql']);
+const runtimeSchemas = new Set(['0006_owner_passwords.sql', '0007_order_returns.sql', '0008_shopify_import.sql', '0009_paymob_sandbox.sql', '0010_live_visitors.sql']);
 const mail = [];
 const intents = [];
 let runtime, db, admin;
@@ -589,4 +589,85 @@ test('public payment review verifies sandbox callbacks without opening native ch
   assert.deepEqual(gates, { checkout_enabled: 0, cod_enabled: 0, card_enabled: 0 });
   await db.prepare('UPDATE store_settings SET checkout_enabled=?, cod_enabled=?, card_enabled=? WHERE id=1')
     .bind(saved.checkout_enabled, saved.cod_enabled, saved.card_enabled).run();
+});
+
+test('live visitor presence is private, refreshes existing visits, expires, and respects opt-outs', async () => {
+  const ownerWeb = browser();
+  assert.equal((await ownerWeb('/admin/session', { action: 'password', password: ownerPassword }, { 'CF-Connecting-IP': '192.0.2.151' })).headers.get('Location'), '/admin');
+  const guest = browser();
+  assert.equal((await guest('/admin/live-visitors.json')).status, 401);
+  assert.equal((await guest('/api/visit')).status, 405);
+  assert.equal((await guest('/api/visit', {}, { Origin: 'https://elsewhere.invalid' })).status, 403);
+  const original = await db.prepare('SELECT analytics_enabled FROM store_settings WHERE id=1').first('analytics_enabled');
+  await db.prepare('UPDATE store_settings SET analytics_enabled=1 WHERE id=1').run();
+  try {
+    const before = await (await ownerWeb('/admin/live-visitors.json')).json();
+    const shopper = browser();
+    const page = await shopper('/');
+    const visit = page.headers.getSetCookie().find((value) => value.startsWith('unlisted_visit='));
+    const id = /unlisted_visit=\d{4}-\d\d-\d\d\.([a-f0-9]{48})/.exec(visit)[1];
+    const visits = await db.prepare('SELECT count(*) AS count FROM visits').first('count');
+    const response = await ownerWeb('/admin/live-visitors.json');
+    assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
+    const active = await response.json();
+    assert.equal(active.visitors, before.visitors + 1);
+    assert.equal(active.windowSeconds, 300);
+    assert.doesNotMatch(JSON.stringify(active), new RegExp(id));
+    assert.ok(active.countries.every((row) => Object.keys(row).sort().join(',') === 'country,visitors'));
+    assert.equal((await shopper('/api/visit', {})).status, 204);
+    assert.equal((await shopper('/api/visit', {})).status, 204);
+    assert.equal(await db.prepare('SELECT count(*) AS count FROM visits').first('count'), visits);
+    assert.equal(await db.prepare('SELECT count(*) AS count FROM visitor_activity WHERE visitor_id=?').bind(id).first('count'), 1);
+    await db.prepare('UPDATE visitor_activity SET last_seen_at=unixepoch()-301 WHERE visitor_id=?').bind(id).run();
+    assert.equal((await (await ownerWeb('/admin/live-visitors.json')).json()).visitors, before.visitors);
+    await shopper('/api/visit', {});
+    assert.equal((await (await ownerWeb('/admin/live-visitors.json')).json()).visitors, before.visitors + 1);
+    const activityRows = await db.prepare('SELECT count(*) AS count FROM visitor_activity').first('count');
+    for (const headers of [{ DNT: '1' }, { 'Sec-GPC': '1' }]) {
+      const privateShopper = browser();
+      const privatePage = await privateShopper('/', null, headers);
+      assert.ok(!privatePage.headers.getSetCookie().some((value) => value.startsWith('unlisted_visit=')));
+      await privateShopper('/api/visit', {}, headers);
+    }
+    assert.equal(await db.prepare('SELECT count(*) AS count FROM visitor_activity').first('count'), activityRows);
+    await db.prepare('UPDATE store_settings SET analytics_enabled=0 WHERE id=1').run();
+    const paused = await (await ownerWeb('/admin/live-visitors.json')).json();
+    assert.equal(paused.enabled, false);
+    assert.equal(paused.visitors, 0);
+    await shopper('/api/visit', {});
+    assert.equal(await db.prepare('SELECT count(*) AS count FROM visitor_activity').first('count'), activityRows);
+  } finally {
+    await db.prepare('UPDATE store_settings SET analytics_enabled=? WHERE id=1').bind(original).run();
+  }
+});
+
+test('period comparisons use matching order and visit windows and exclude the ending boundary', async () => {
+  const ownerWeb = browser();
+  assert.equal((await ownerWeb('/admin/session', { action: 'password', password: ownerPassword }, { 'CF-Connecting-IP': '192.0.2.152' })).headers.get('Location'), '/admin');
+  await db.prepare("UPDATE variants SET inventory=20,price=60000 WHERE id='v'").run();
+  const moments = [
+    ['2026-11-01', Date.parse('2026-11-01T12:00:00Z') / 1000],
+    ['2026-11-02', Date.parse('2026-11-02T12:00:00Z') / 1000],
+    ['2026-10-30', Date.parse('2026-10-30T12:00:00Z') / 1000],
+    ['2026-11-03', Date.parse('2026-11-02T22:00:00Z') / 1000],
+  ];
+  for (const [index, [day, created]] of moments.entries()) {
+    const buyer = browser();
+    const input = await customerCheckout(buyer, 'period-' + index + '@example.invalid', 'cod', '');
+    const placed = await buyer('/api/checkout', input);
+    const id = placed.headers.get('Location')?.split('/').at(-1);
+    assert.match(id, /^[a-f0-9]{32}$/);
+    const visitor = await db.prepare('SELECT visitor_id FROM orders WHERE id=?').bind(id).first('visitor_id');
+    await db.prepare('UPDATE orders SET created_at=?,visitor_day=? WHERE id=?').bind(created, day, id).run();
+    await db.prepare('INSERT OR IGNORE INTO visits (visitor_id,day) VALUES (?,?)').bind(visitor, day).run();
+  }
+  const response = await ownerWeb('/admin/analytics?start=2026-11-01&end=2026-11-02&compare=previous');
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<span>Sales<\/span>\s*<strong>2<\/strong>/);
+  assert.match(html, /<span>Visitors<\/span>\s*<strong>2<\/strong>/);
+  assert.match(html, /\+100%/);
+  assert.match(html, /1,360 EGP/);
+  assert.match(html, /30 Oct – 31 Oct 2026/);
+  assert.match(html, /100\.0%/);
 });

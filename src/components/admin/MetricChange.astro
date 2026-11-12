@@ -1,0 +1,11 @@
+---
+import { metricChange } from '../../lib/reporting.js';
+const { current, previous, points = false } = Astro.props;
+const change = metricChange(current, previous, points);
+---
+<span class:list={['metric-change', 'change-' + change.direction]} title={change.description}>
+  {change.direction !== 'neutral' && <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true">
+    <path d={change.direction === 'up' ? 'm3 11 8-8M4 3h7v7' : 'm3 5 8 8M4 13h7V6'} />
+  </svg>}
+  {change.label}
+</span>

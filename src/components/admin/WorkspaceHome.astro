@@ -2,7 +2,11 @@
 import { env } from 'cloudflare:workers';
 import Icon from './Icon.astro';
 import ReportingPeriod from './ReportingPeriod.astro';
-import { dashboard, reportDays } from '../../lib/admin.js';
+import { dashboard } from '../../lib/admin.js';
+import { reportingRange } from '../../lib/reporting.js';
+import { liveVisitors } from '../../lib/live-visitors.js';
+import LiveVisitors from './LiveVisitors.astro';
+import MetricChange from './MetricChange.astro';
 import { workspaceSections } from '../../lib/admin-navigation.js';
 import { emailReady } from '../../lib/auth.js';
 import { getSettings } from '../../lib/catalog.js';
@@ -10,17 +14,24 @@ import { checkoutReady } from '../../lib/checkout.js';
 import { mediaUrl, money } from '../../lib/content.js';
 import { cardReady } from '../../lib/paymob.js';
 
-const days = reportDays(Astro.url);
+const range = reportingRange(Astro.url);
 const [metrics, settings, archived] = await Promise.all([
-  dashboard(env.DB, days), getSettings(Astro, env.DB),
+  dashboard(env.DB, range), getSettings(Astro, env.DB),
   env.DB.prepare('SELECT count(*) AS count FROM shopify_orders').first('count'),
 ]);
+const activity = await liveVisitors(env.DB, settings.analytics_enabled).catch(() => ({ enabled: Boolean(settings.analytics_enabled), available: false, visitors: 0, countries: [], unknown: 0 }));
 const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
 const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+const conversion = metrics.visitors ? 100 * metrics.converted / metrics.visitors : null;
+const previousConversion = metrics.previous?.visitors ? 100 * metrics.previous.converted / metrics.previous.visitors : null;
 const stats = [
-  ['Visitors', metrics.visitors], ['Paid revenue', money(metrics.revenue, true)], ['Orders', metrics.sales],
-  ['Conversion', metrics.visitors ? (100 * metrics.converted / metrics.visitors).toFixed(1) + '%' : '—'],
+  ['Visitors', metrics.visitors, metrics.visitors, metrics.previous?.visitors, false],
+  ['Paid revenue', money(metrics.revenue, true), metrics.revenue, metrics.previous?.revenue, false],
+  ['Orders', metrics.sales, metrics.sales, metrics.previous?.sales, false],
+  ['Conversion', conversion === null ? '—' : conversion.toFixed(1) + '%', conversion, previousConversion, true],
 ];
+const reportUrl = new URL(Astro.url);
+reportUrl.pathname = '/admin/analytics';
 const tasks = [
   ['orders', 'Review orders', metrics.newOrders, '/admin/orders'],
   ['returns', 'Review return requests', metrics.newReturns, '/admin/returns'],
@@ -38,25 +49,30 @@ const readiness = [
 const poster = mediaUrl(settings.hero_poster);
 ---
 <div class="workspace-home">
-  <section class="home-summary" aria-label="Store performance">
-    <div class="home-period"><p class="overline">UNLISTED STORE</p><ReportingPeriod days={days} /></div>
-    <dl class="home-stats">{stats.map(([label, value]) => <div><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-    <a href={'/admin/analytics?days=' + days} class="home-summary-link" aria-label="View detailed store analytics"><Icon name="arrow" /></a>
-  </section>
-
-  <section class="home-intro">
-    <p class="home-intro-label"><span></span> UNLISTED™ WORKSPACE</p>
-    <h1>{greeting}, UNLISTED.</h1>
-    <p>{metrics.newOrders || metrics.newReturns ? 'Review new orders and return requests from your workspace.' : 'There are no new orders or return requests to review.'}</p>
-    <button class="home-command" type="button" data-admin-search aria-haspopup="dialog" hidden><Icon name="search" /> Find a page in your workspace <kbd>Ctrl K</kbd></button>
-    <nav class="home-actions" aria-label="Store actions">
-      {tasks.map(([icon, label, count, link]) => <a href={link}><Icon name={icon} />{label}<span>{count}</span></a>)}
-    </nav>
-  </section>
+  <header class="workspace-heading">
+    <div><p class="overline">YOUR STORE, AT A GLANCE</p><h1>{greeting}, UNLISTED.</h1><p>See what is happening, and how your store is growing.</p></div>
+    <a class="button" href="/" target="_blank" rel="noopener">Open storefront ↗</a>
+  </header>
+  <ReportingPeriod range={range} />
+  <div class="home-dashboard">
+    <div class="home-performance">
+      <section class="panel home-summary" aria-label="Store performance">
+        <header class="performance-heading"><div><p class="overline">ONLINE STORE</p><h2>Performance</h2></div><a href={reportUrl.pathname + reportUrl.search}>View report <Icon name="arrow" /></a></header>
+        <dl class="home-stats">{stats.map(([label, value, current, previous, points]) => <div><dt>{label}</dt><dd>{value}</dd>
+          {range.previous && <MetricChange current={current} previous={previous} points={points} />}
+        </div>)}</dl>
+        <p class="metrics-scope">Orders and visits recorded on this storefront. Comparisons use the dates above.</p>
+      </section>
+      <section class="panel home-next"><h2>Next up</h2><nav class="home-actions" aria-label="Store actions">
+        {tasks.map(([icon, label, count, link]) => <a href={link}><Icon name={icon} />{label}<span>{count}</span></a>)}
+      </nav></section>
+    </div>
+    <LiveVisitors activity={activity} />
+  </div>
 
   <div class="home-panels">
     <section class="panel home-ready">
-      <h2>Launch checklist</h2>
+      <h2>Store connections</h2>
       <dl>{readiness.map(([label, status, link, ready]) => <div>
         <dt>{label}</dt><dd><a class:list={['home-state', ready && 'is-ready']} href={link}>{status}</a></dd>
       </div>)}</dl>

@@ -1,8 +1,41 @@
 ---
-import { reportingPeriods } from '../../lib/admin.js';
-const { days } = Astro.props;
+import { dateRangeLabel, periodLink, reportingRange } from '../../lib/reporting.js';
+const range = Astro.props.range ?? reportingRange(Astro.url);
+const compareValues = {
+  compare: range.comparison,
+  ...(range.comparison === 'custom' ? { compare_start: range.previous.startDate, compare_end: range.previous.endDate } : {}),
+};
+const options = [['previous', 'Previous period'], ['year', 'Previous year'], ['custom', 'Choose dates'], ['none', 'No comparison']];
 ---
-<form method="get" class="inline-form">
-  <label>Reporting period <select name="days">{reportingPeriods.map((period) => <option selected={days === period} value={period}>Last {period} days</option>)}</select></label>
-  <button class="button">Apply</button>
-</form>
+<div class="reporting-period">
+  <div class="report-toolbar">
+    <nav class="report-presets" aria-label="Reporting period">
+      {[1, 7, 30, 90].map((days) => <a href={periodLink(Astro.url, { days, ...compareValues })}
+        aria-current={!range.custom && range.days === days ? 'page' : undefined}>{days === 1 ? 'Today' : days + ' days'}</a>)}
+    </nav>
+    <details class="report-picker" data-report-picker>
+      <summary aria-label={'Reporting period: ' + range.label + '. Change dates and comparison'}>
+        <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4.5" width="14" height="13" rx="2"/><path d="M6 2v5m8-5v5M3 9h14"/></svg>
+        <span>{dateRangeLabel(range.current)}</span>
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
+      </summary>
+      <form method="get" class="report-options" data-report-form>
+        <fieldset><legend>Date range</legend><div class="report-date-grid">
+          <label>From<input type="date" name="start" value={range.current.startDate} min="2000-01-01" max={range.today} required /></label>
+          <label>To<input type="date" name="end" value={range.current.endDate} min="2000-01-01" max={range.today} required /></label>
+        </div></fieldset>
+        <fieldset><legend>Compare with</legend><div class="report-compare-options">
+          {options.map(([value, label]) => <label><input type="radio" name="compare" value={value} checked={range.comparison === value} /><span>{label}</span></label>)}
+        </div>
+          <div class="report-date-grid report-comparison-dates" data-comparison-dates hidden={range.comparison !== 'custom'}>
+            <label>Compare from<input type="date" name="compare_start" value={range.previous?.startDate ?? range.current.startDate} min="2000-01-01" max={range.today} disabled={range.comparison !== 'custom'} required /></label>
+            <label>Compare to<input type="date" name="compare_end" value={range.previous?.endDate ?? range.current.endDate} min="2000-01-01" max={range.today} disabled={range.comparison !== 'custom'} required /></label>
+          </div>
+        </fieldset>
+        <footer><small>Dates in Cairo time · up to 366 days</small><button class="button primary" type="submit">Apply dates</button></footer>
+      </form>
+    </details>
+    <span class="report-comparison-label">{range.previous ? 'vs ' + range.previousLabel : 'Comparison off'}</span>
+  </div>
+  {range.error && <p class="report-error" role="alert">{range.error}</p>}
+</div>

@@ -5,6 +5,7 @@ import { checked, priceValue, quantityValue, slugValue, StoreError, textValue } 
 import { cardReady } from './paymob.js';
 import { ensureReturns, manageReturn } from './returns.js';
 import { importShopify } from './shopify-import.js';
+import { reportingRange } from './reporting.js';
 
 export const adminSections = [
   ['products', 'Products'], ['collections', 'Collections'], ['orders', 'Orders'], ['customers', 'Customers'],
@@ -17,7 +18,7 @@ export function queryOffset(url) {
   return Math.max(0, Math.min(10000, Number.parseInt(url.searchParams.get('offset') ?? '0', 10) || 0));
 }
 
-export const reportingPeriods = [7, 30, 90];
+export const reportingPeriods = [1, 7, 30, 90];
 
 export function reportDays(url) {
   const selected = Number(url.searchParams.get('days'));
@@ -296,23 +297,26 @@ export const adminActions = {
   media: mediaAction, settings: settingsAction, inbox: inboxAction, return: manageReturn, 'shopify-import': importShopify,
 };
 
-export async function dashboard(db, days) {
+export async function dashboard(db, period) {
   await ensureReturns(db);
-  const since = unixNow() - days * 86400;
-  const day = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Africa/Cairo' }).format(new Date(since * 1000));
-  const results = await statements(db, [
+  const range = typeof period === 'object' ? period : reportingRange(new URL('https://unlisted.invalid/?days=' + (period ?? 30)));
+  const queries = (window) => [
     [`SELECT count(*) AS sales, coalesce(sum(total), 0) AS gross,
       coalesce(sum(CASE WHEN payment_status = 'paid' THEN total - (SELECT coalesce(sum(refund_amount), 0)
         FROM order_returns WHERE order_id = orders.id AND state = 'completed') ELSE 0 END), 0) AS revenue
-      FROM orders WHERE created_at >= ? AND ${acceptedOrder}`, since],
-    ['SELECT count(DISTINCT visitor_id) AS visitors FROM visits WHERE day >= ?', day],
+      FROM orders WHERE created_at >= ? AND created_at < ? AND ${acceptedOrder}`, window.start, window.end],
+    ['SELECT count(DISTINCT visitor_id) AS visitors FROM visits WHERE day >= ? AND day < ?', window.startDate, window.untilDate],
     [`SELECT count(DISTINCT o.visitor_id) AS converted FROM orders o
-      WHERE o.created_at >= ? AND ${acceptedOrder} AND EXISTS (
-        SELECT 1 FROM visits v WHERE v.visitor_id = o.visitor_id AND v.day = o.visitor_day AND v.day >= ?
-      )`, since, day],
+      WHERE o.created_at >= ? AND o.created_at < ? AND ${acceptedOrder} AND EXISTS (
+        SELECT 1 FROM visits v WHERE v.visitor_id = o.visitor_id AND v.day = o.visitor_day AND v.day >= ? AND v.day < ?
+      )`, window.start, window.end, window.startDate, window.untilDate],
+  ];
+  const results = await statements(db, [
+    ...queries(range.current),
     [`SELECT i.product_title AS title, sum(i.quantity) AS units, sum(i.quantity * i.price) AS gross
       FROM order_items i JOIN orders o ON o.id = i.order_id
-      WHERE o.created_at >= ? AND ${acceptedOrder} GROUP BY i.product_title ORDER BY units DESC, gross DESC LIMIT 8`, since],
+      WHERE o.created_at >= ? AND o.created_at < ? AND ${acceptedOrder} GROUP BY i.product_title ORDER BY units DESC, gross DESC LIMIT 8`, range.current.start, range.current.end],
+    ...queries(range.previous ?? range.current),
     [`SELECT count(*) AS count FROM variants v JOIN products p ON p.id = v.product_id
       WHERE p.status = 'active' AND p.preorder = 0 AND v.active = 1 AND v.published_available = 1 AND v.inventory IS NULL`],
     ["SELECT count(*) AS count FROM payment_events WHERE state = 'late'"],
@@ -321,8 +325,10 @@ export async function dashboard(db, days) {
   ]);
   return {
     ...results[0].results[0], visitors: results[1].results[0].visitors, converted: results[2].results[0].converted,
-    products: results[3].results, unknownStock: results[4].results[0].count,
-    latePayments: results[5].results[0].count, newOrders: results[6].results[0].count,
-    newReturns: results[7].results[0].count,
+    products: results[3].results, previous: range.previous ? {
+      ...results[4].results[0], visitors: results[5].results[0].visitors, converted: results[6].results[0].converted,
+    } : null,
+    unknownStock: results[7].results[0].count, latePayments: results[8].results[0].count,
+    newOrders: results[9].results[0].count, newReturns: results[10].results[0].count,
   };
 }

@@ -1,0 +1,16 @@
+---
+const { activity } = Astro.props;
+const regionNames = new Intl.DisplayNames(['en'], { type: 'region' });
+const available = activity.enabled && activity.available !== false;
+---
+<section class="panel live-visitors" aria-label="Live store visitors" data-live-visitors data-live-initial={JSON.stringify(activity)}>
+  <header><h2>Live visitors</h2><span class:list={['live-status', !available && 'is-paused']} data-live-status><i aria-hidden="true"></i>{available ? 'Live' : activity.enabled ? 'Unavailable' : 'Paused'}</span></header>
+  <div class="live-total"><strong data-live-count aria-live="polite" aria-atomic="true">{available ? activity.visitors.toLocaleString('en-GB') : '—'}</strong><span>on your store right now</span></div>
+  <div class="live-globe"><canvas width="600" height="440" data-live-globe aria-hidden="true"></canvas></div>
+  <ul class="live-countries" data-live-countries aria-label="Visitors by country">
+    {activity.countries.slice(0, 3).map(({ country, visitors }) => <li><span>{regionNames.of(country)}</span><strong>{visitors}</strong></li>)}
+    {Boolean(activity.unknown) && <li><span>Location unavailable</span><strong>{activity.unknown}</strong></li>}
+  </ul>
+  <p class="live-empty" data-live-empty hidden={available && activity.visitors > 0}>{!activity.enabled ? 'Visitor analytics are paused' : available ? 'Waiting for storefront activity' : 'Live activity is temporarily unavailable'}</p>
+  <footer><span data-live-updated>Updates every 15 seconds</span><small>Active in the last 5 minutes · approximate country locations</small></footer>
+</section>

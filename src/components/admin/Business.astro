@@ -1,35 +1,40 @@
 ---
 import { env } from 'cloudflare:workers';
-import { dashboard, reportDays } from '../../lib/admin.js';
+import { dashboard } from '../../lib/admin.js';
+import { reportingRange } from '../../lib/reporting.js';
 import { money } from '../../lib/content.js';
 import Metrics from './Metrics.astro';
 import ReportingPeriod from './ReportingPeriod.astro';
 const { section, title } = Astro.props;
 const finance = section === 'finance';
-const days = reportDays(Astro.url);
-const metrics = section === 'automations' ? null : await dashboard(env.DB, days);
+const range = reportingRange(Astro.url);
+const metrics = section === 'automations' ? null : await dashboard(env.DB, range);
 const conversion = metrics?.visitors ? (100 * metrics.converted / metrics.visitors).toFixed(1) + '%' : '—';
+const compare = (key) => metrics?.previous ? { current: metrics[key], previous: metrics.previous[key] } : null;
 ---
 <div class="admin-heading">
   <div><p class="overline">WORKSPACE</p><h1>{title}</h1>
     <p>{finance ? 'Sales and payments recorded by your store.' : metrics ? 'Store traffic, conversion, and promotions.' : 'Business workflow status and scheduled store maintenance.'}</p>
   </div>
-  {metrics && <ReportingPeriod days={days} />}
 </div>
+{metrics && <ReportingPeriod range={range} />}
 {metrics ? finance ? <>
   <Metrics cards={[
-    ['Paid revenue', money(metrics.revenue, true), 'Collected, excluding recorded refunds'],
-    ['Gross order value', money(metrics.gross, true), 'Accepted order totals after discounts, including shipping'],
-    ['Accepted orders', metrics.sales, 'Cash on delivery and accepted card orders'],
+    ['Paid revenue', money(metrics.revenue, true), 'Collected, excluding recorded refunds', compare('revenue')],
+    ['Gross order value', money(metrics.gross, true), 'Accepted order totals after discounts, including shipping', compare('gross')],
+    ['Accepted orders', metrics.sales, 'Cash on delivery and accepted card orders', compare('sales')],
   ]} />
   <section class="panel"><h2>Order payments</h2><p>Review payment status and recorded refunds for individual orders.</p>
     <a class="button" href="/admin/orders">View orders</a>
   </section>
 </> : <>
   <Metrics cards={[
-    ['Visitors', metrics.visitors, 'Unique browser visits'],
-    ['Converted visitors', metrics.converted, 'Visitors who placed an accepted order'],
-    ['Conversion rate', conversion, 'Share of visitors who placed an accepted order'],
+    ['Visitors', metrics.visitors, 'Unique browser visits', compare('visitors')],
+    ['Converted visitors', metrics.converted, 'Visitors who placed an accepted order', compare('converted')],
+    ['Conversion rate', conversion, 'Share of visitors who placed an accepted order', metrics.previous ? {
+      current: metrics.visitors ? 100 * metrics.converted / metrics.visitors : null,
+      previous: metrics.previous.visitors ? 100 * metrics.previous.converted / metrics.previous.visitors : null, points: true,
+    } : null],
   ]} />
   <section class="panel"><h2>Promotions</h2><p>Create discount codes and review usage in Website.</p>
     <div class="admin-links"><a class="button primary" href="/admin/discounts">Manage discounts</a><a class="button" href="/admin/analytics">View store analytics</a></div>

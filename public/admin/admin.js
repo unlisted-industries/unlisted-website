@@ -79,3 +79,25 @@ if (searches.length && typeof dialog?.showModal === 'function') {
     }
   });
 }
+
+for (const picker of document.querySelectorAll('[data-report-picker]')) {
+  const form = picker.querySelector('[data-report-form]');
+  const comparisonDates = form.querySelector('[data-comparison-dates]');
+  form.addEventListener('change', () => {
+    const custom = form.elements.namedItem('compare').value === 'custom';
+    comparisonDates.hidden = !custom;
+    for (const input of comparisonDates.querySelectorAll('input')) input.disabled = !custom;
+    const from = form.elements.namedItem('start');
+    const to = form.elements.namedItem('end');
+    to.min = from.value || '2000-01-01';
+    from.setCustomValidity(from.value && to.value && from.value > to.value ? 'The start date must be on or before the end date.' : '');
+    const compareFrom = form.elements.namedItem('compare_start');
+    const compareTo = form.elements.namedItem('compare_end');
+    compareTo.min = compareFrom.value || '2000-01-01';
+    compareFrom.setCustomValidity(custom && compareFrom.value > compareTo.value ? 'Check the comparison dates.' : '');
+  });
+  document.addEventListener('click', (event) => { if (!picker.contains(event.target)) picker.open = false; });
+  picker.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { picker.open = false; picker.querySelector('summary').focus(); }
+  });
+}

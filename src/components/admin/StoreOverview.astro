@@ -3,7 +3,10 @@ import { env } from 'cloudflare:workers';
 import Metrics from './Metrics.astro';
 import ReportingPeriod from './ReportingPeriod.astro';
 import { emailReady } from '../../lib/auth.js';
-import { dashboard, reportDays } from '../../lib/admin.js';
+import { dashboard } from '../../lib/admin.js';
+import { reportingRange } from '../../lib/reporting.js';
+import { liveVisitors } from '../../lib/live-visitors.js';
+import LiveVisitors from './LiveVisitors.astro';
 import { getSettings } from '../../lib/catalog.js';
 import { checkoutReady } from '../../lib/checkout.js';
 import { cardReady } from '../../lib/paymob.js';
@@ -11,16 +14,21 @@ import { money } from '../../lib/content.js';
 
 const { view } = Astro.props;
 const website = view === 'website';
-const days = reportDays(Astro.url);
+const range = reportingRange(Astro.url);
 const [metrics, settings] = await Promise.all([
-  dashboard(env.DB, days), view === 'analytics' ? null : getSettings(Astro, env.DB),
+  dashboard(env.DB, range), getSettings(Astro, env.DB),
 ]);
+const activity = await liveVisitors(env.DB, settings.analytics_enabled).catch(() => ({ enabled: Boolean(settings.analytics_enabled), available: false, visitors: 0, countries: [], unknown: 0 }));
 const conversion = metrics.visitors ? (100 * metrics.converted / metrics.visitors).toFixed(1) + '%' : '—';
+const compare = (key) => metrics.previous ? { current: metrics[key], previous: metrics.previous[key] } : null;
 const cards = [
-  ['Sales', metrics.sales, 'Accepted orders'],
-  ['Paid revenue', money(metrics.revenue, true), 'Collected, excluding recorded refunds'],
-  ['Visitors', metrics.visitors, 'Unique browser visits'],
-  ['Conversion', conversion, 'Visitors who placed an accepted order'],
+  ['Sales', metrics.sales, 'Accepted orders', compare('sales')],
+  ['Paid revenue', money(metrics.revenue, true), 'Collected, excluding recorded refunds', compare('revenue')],
+  ['Visitors', metrics.visitors, 'Unique browser visits', compare('visitors')],
+  ['Conversion', conversion, 'Visitors who placed an accepted order', metrics.previous ? {
+    current: metrics.visitors ? 100 * metrics.converted / metrics.visitors : null,
+    previous: metrics.previous.visitors ? 100 * metrics.previous.converted / metrics.previous.visitors : null, points: true,
+  } : null],
 ];
 ---
 <div class="admin-heading">
@@ -29,15 +37,15 @@ const cards = [
     <h1>{website ? 'Website overview' : 'Analytics'}</h1>
     <p>Orders, visitors and revenue recorded by your store.</p>
   </div>
-  <ReportingPeriod days={days} />
 </div>
+<ReportingPeriod range={range} />
 {website && <div class="admin-links panel">
   <a class="button primary" href="/admin/products?new=1">Add product</a>
   <a class="button" href="/admin/orders">Manage orders</a>
   <a class="button" href="/" target="_blank" rel="noopener">View store ↗</a>
 </div>}
 <Metrics cards={cards} />
-<div class:list={[settings && 'admin-two']}>
+<div class="admin-report-grid">
   <section class="panel">
     <h2>Bestselling products</h2>
     {metrics.products.length ? <div class="table-wrap"><table>
@@ -46,7 +54,9 @@ const cards = [
     </table></div> : <p class="muted">Accepted orders will appear here.</p>}
     <p class="muted">Gross order value {money(metrics.gross, true)}</p>
   </section>
-  {settings && <section class="panel">
+  <LiveVisitors activity={activity} />
+</div>
+{website && <section class="panel">
     <h2>Store status</h2>
     <dl class="admin-kv">
       <div><dt>Checkout</dt><dd><span class="pill">{checkoutReady(env, settings) ? 'Open' : 'Closed'}</span></dd></div>
@@ -58,4 +68,3 @@ const cards = [
       <div><dt>Email delivery</dt><dd>{emailReady(env) ? 'Configured' : 'Pending'}</dd></div>
     </dl>
   </section>}
-</div>
