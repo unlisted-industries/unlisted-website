@@ -4,6 +4,7 @@ import { ensureLiveVisitors } from './live-visitors.js';
 export async function expireOldData(db) {
   await ensureLiveVisitors(db);
   await statements(db, [
+    ['DELETE FROM checkout_drafts WHERE expires_at<=unixepoch()'],
     [`UPDATE orders SET status = 'cancelled', payment_status = 'unpaid', updated_at = unixepoch()
       WHERE id IN (
         SELECT id FROM orders WHERE status = 'new' AND payment_status = 'pending'
