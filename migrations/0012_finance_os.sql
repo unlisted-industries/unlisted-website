@@ -49,3 +49,9 @@ CREATE TRIGGER IF NOT EXISTS finance_capture_payment_date AFTER UPDATE OF paymen
  INSERT OR IGNORE INTO finance_payment_dates(order_id,paid_at) VALUES(NEW.id,unixepoch());
 END;
 CREATE TABLE IF NOT EXISTS finance_advice (id TEXT PRIMARY KEY,question TEXT NOT NULL,response TEXT NOT NULL,actor TEXT NOT NULL,created_at INTEGER NOT NULL DEFAULT(unixepoch()));
+CREATE TRIGGER IF NOT EXISTS finance_batch_receipt_guard BEFORE UPDATE OF state ON finance_batches WHEN NEW.state='received' AND OLD.state='planned' BEGIN
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM variants v LEFT JOIN finance_variant_costs c ON c.variant_id=v.id WHERE v.id=NEW.variant_id AND v.inventory IS NOT NULL AND (v.inventory=0 OR c.unit_cost IS NOT NULL)) THEN RAISE(ABORT,'Verified stock and cost are required for receipt') END;
+END;
+CREATE TRIGGER IF NOT EXISTS finance_pr_cost_guard BEFORE INSERT ON finance_pr_gifts BEGIN
+ SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM finance_variant_costs WHERE variant_id=NEW.variant_id AND unit_cost=NEW.cost_per_unit) THEN RAISE(ABORT,'Product cost changed; review the gift again') END;
+END;
