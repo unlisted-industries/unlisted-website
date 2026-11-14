@@ -93,11 +93,14 @@ export async function applyFinanceAction(db,form,actor='owner') {
   const cost=Math.round(((v.inventory||0)*(v.unit_cost||0)+row.cost)/(v.inventory+row.quantity));
   changes.push(statement(db,`UPDATE finance_batches SET state='received',received_on=? WHERE id=? AND state='planned' RETURNING id`,day,batchId));
   // A DB trigger is intentionally unnecessary: request uniqueness makes this entire batch atomic.
+  changes.push(statement(db,`INSERT INTO finance_variant_costs(variant_id,unit_cost,updated_at)
+    SELECT v.id,cast(round((v.inventory*coalesce(c.unit_cost,0)+?)*1.0/(v.inventory+?)) AS INTEGER),unixepoch()
+    FROM variants v LEFT JOIN finance_variant_costs c ON c.variant_id=v.id WHERE v.id=?
+    ON CONFLICT(variant_id) DO UPDATE SET unit_cost=excluded.unit_cost,updated_at=unixepoch()`,row.cost,row.quantity,row.variant_id));
   changes.push(statement(db,'UPDATE variants SET inventory=inventory+? WHERE id=?',row.quantity,row.variant_id));
-  changes.push(statement(db,`INSERT INTO finance_variant_costs VALUES(?,?,unixepoch()) ON CONFLICT(variant_id) DO UPDATE SET unit_cost=excluded.unit_cost,updated_at=unixepoch()`,row.variant_id,cost));
-  changes.push(statement(db,'INSERT INTO finance_cost_history(id,variant_id,unit_cost,effective_at) VALUES(?,?,?,unixepoch())',id,row.variant_id,cost));
+  changes.push(statement(db,'INSERT INTO finance_cost_history(id,variant_id,unit_cost,effective_at) SELECT ?,variant_id,unit_cost,unixepoch() FROM finance_variant_costs WHERE variant_id=?',id,row.variant_id));
   // Receiving a batch posts an unpaid invoice; payment is a separate supplier payment.
-  changes.push(journal(db,{id,source:'batch:'+batchId,day,kind:'supplier_invoice',drop:row.drop_id,note:row.name,actor,postings:postingsFor('supplier_invoice','unallocated',row.cost)}));audit(batchId,{cost});
+  changes.push(journal(db,{id,source:'batch:'+batchId,day,kind:'supplier_invoice',drop:row.drop_id,note:row.name,actor,postings:postingsFor('supplier_invoice','unallocated',row.cost)}));audit(batchId,{batchCost:row.cost,method:'weighted_average'});
  } else if(op==='reverse') {
   const row=await statement(db,'SELECT * FROM finance_journals WHERE id=?',t(form,'journal_id',120)).first();
   if(!row||row.reversal_of||row.kind==='pr_gift'||row.source.startsWith('batch:'))throw new StoreError('This journal requires an operational correction, not a financial-only reversal.');
