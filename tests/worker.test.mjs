@@ -720,6 +720,14 @@ test('finance batch receipts and PR gifts change stock once and preserve liabili
  assert.match(tooMany.headers.get('Location'),/sufficient/);
  assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id='finance-v'").first('inventory'),18);
  assert.equal(await db.prepare("SELECT count(*) n FROM finance_pr_gifts WHERE recipient='Fixture influencer'").first('n'),1);
+ await post('batch',{name:'Concurrent batch one',drop_id:drop,variant_id:'finance-v',quantity:'6',raw_materials:'3000'});
+ await post('batch',{name:'Concurrent batch two',drop_id:drop,variant_id:'finance-v',quantity:'6',raw_materials:'4800'});
+ const incoming=(await db.prepare("SELECT id FROM finance_batches WHERE name LIKE 'Concurrent batch %' ORDER BY name").all()).results;
+ const receiptResults=await Promise.all(incoming.map((b,n)=>web('/admin/finance-action',{op:'receive_batch',confirmed:'yes',batch_id:b.id,occurred_on:day,request_id:('1'+n).repeat(16)})));
+ assert.ok(receiptResults.every(r=>r.headers.get('Location').includes('saved=1')));
+ assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id='finance-v'").first('inventory'),30);
+ assert.equal(await db.prepare("SELECT unit_cost FROM finance_variant_costs WHERE variant_id='finance-v'").first('unit_cost'),53000);
+
 });
 
 test('statement import waits for confirmation, blocks duplicates and keeps original files private',async()=>{
