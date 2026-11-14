@@ -2,7 +2,8 @@
 import { env } from 'cloudflare:workers';
 import { all } from '../../lib/db.js';
 import { getSettings, lookupPage } from '../../lib/catalog.js';
-import { paymentConfigurationIssues, paymentOrigin, sandboxReady } from '../../lib/paymob.js';
+import { telegramReady } from '../../lib/order-notifications.js';
+import { walletReady, paymentConfigurationIssues, paymentOrigin, sandboxReady } from '../../lib/paymob.js';
 import { emailReady } from '../../lib/auth.js';
 import { mediaUrl } from '../../lib/content.js';
 import { queryOffset } from '../../lib/admin.js';
@@ -111,12 +112,15 @@ const paymentIssues = store ? paymentConfigurationIssues(env) : [];
       <div><dt>Paymob</dt><dd>{paymentIssues.length ? 'Credentials pending' : 'Configured'}</dd></div>
       <div><dt>Paymob webhook</dt><dd><code>{callbackOrigin}/api/paymob</code></dd></div>
       <div><dt>Paymob return URL</dt><dd><code>{callbackOrigin}/api/payment-return</code></dd></div>
+      <div><dt>Wallet payments</dt><dd>{walletReady(env) ? 'Configured' : 'Wallet integration ID required'}</dd></div>
+      <div><dt>Telegram order notifications</dt><dd>{telegramReady(env) ? 'Configured' : 'Bot token and chat ID required'}</dd></div>
       <div><dt>Sign-in and order email</dt><dd>{emailReady(env) ? 'Configured' : 'Credentials pending'}</dd></div>
     </dl>
     {paymentIssues.length > 0 && <div>
       <p class="muted">These settings are missing or invalid in the deployed Worker. Open Cloudflare → unlisted-website → Settings → Variables and Secrets.</p>
       <ul>{paymentIssues.map((name) => <li><code>{name}</code></li>)}</ul>
     </div>}
+    <p class="muted">Order alerts use the UNLISTED bot identity configured in Telegram. Store TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID as encrypted Worker secrets. Wallet checkout requires its own PAYMOB_WALLET_INTEGRATION_IDS (or PAYMOB_TEST_WALLET_INTEGRATION_IDS with test keys). Card IDs remain separate.</p>
     {sandboxReady(env, Astro.url.origin) && <p><a href="/admin/paymob-test">Test Paymob checkout</a></p>}
   </section>
   <button class="button primary">Save settings</button>
