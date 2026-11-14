@@ -86,9 +86,12 @@ export async function financeReport(db,url) {
   if(o.fulfillment.toLowerCase()!=='fulfilled'){if(paid)customerLiability+=net;continue;}
   warnings.add('Historical Shopify revenue uses fulfillment/order dates; delivery and settlement dates must be reconciled from source evidence.');
   add('revenue',net,dayOf(o.created_at),{source:'shopify',order:o.source_id,campaign});
-  for(const [index,item] of safeJson(o.line_items).entries()) {
-   const key=String(item.sku||item.variant_id||index),q=Number(item.quantity||1);
-   const cost=historicalCosts.find(c=>c.source==='shopify'&&c.order_id===o.source_id&&c.variant_key===key);
+  const historicalItems=safeJson(o.line_items);
+  for(const [index,item] of historicalItems.entries()) {
+   const legacyKey=String(item.sku||item.variant_id||index),key=String(index)+':'+legacyKey,q=Number(item.quantity||1);
+   const unambiguousLegacy=historicalItems.filter((other,n)=>String(other.sku||other.variant_id||n)===legacyKey).length===1;
+   const cost=historicalCosts.find(c=>c.source==='shopify'&&c.order_id===o.source_id&&c.variant_key===key)||
+    (unambiguousLegacy?historicalCosts.find(c=>c.source==='shopify'&&c.order_id===o.source_id&&c.variant_key===legacyKey):null);
    if(cost)add('cogs',cost.unit_cost*q,dayOf(o.created_at),{campaign});
    else missingCosts.push({source:'shopify',order_id:o.source_id,variant_key:key,label:item.name||item.title||key,quantity:q,day:dayOf(o.created_at)});
   }
