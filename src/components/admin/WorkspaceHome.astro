@@ -41,7 +41,7 @@ const paymobConfigured = cardReady(env);
 const emailConfigured = emailReady(env);
 const checkoutOpen = checkoutReady(env, settings);
 const readiness = [
-  ['Shopify order archive', archived > 0 ? archived + ' imported' : 'Awaiting import', '/admin/migration', archived > 0],
+  ['Historical orders', archived > 0 ? archived + ' imported' : 'Awaiting import', '/admin/orders', archived > 0],
   ['Paymob', paymobConfigured ? 'Credentials configured' : 'Credentials pending', '/admin/settings#payments', paymobConfigured],
   ['Order and account email', emailConfigured ? 'Configured' : 'Credentials pending', '/admin/settings#payments', emailConfigured],
   ['Store checkout', checkoutOpen ? 'Open' : 'Closed', '/admin/settings#payments', checkoutOpen],
