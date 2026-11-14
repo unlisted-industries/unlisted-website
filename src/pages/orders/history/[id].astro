@@ -1,0 +1,23 @@
+---
+import { env } from 'cloudflare:workers';
+import Store from '../../../layouts/Store.astro';
+import { currentUser } from '../../../lib/auth.js';
+import { historicalOrder } from '../../../lib/order-history.js';
+import { displayDate } from '../../../lib/content.js';
+const user = await currentUser(env,Astro);
+const order = user ? await historicalOrder(env.DB,Astro.params.id,user.email) : null;
+const header = order?.data ? JSON.parse(order.data).header ?? {} : {};
+const fields = ['Shipping Name','Shipping Address1','Shipping Address2','Shipping City','Shipping Province Name','Shipping Method','Shipping Phone','Payment Method','Discount Code','Discount Amount','Refunded Amount'];
+if (!order) Astro.response.status=404;
+---
+<Store title="Order details" noIndex><section class="store-checkout">
+  <h1>{order ? 'ORDER ' + order.order_number : 'ORDER NOT FOUND'}</h1>
+  {order ? <>
+    <p>{displayDate(order.created_at)} · {order.cancelled_at ? 'Cancelled' : order.fulfillment} · {order.payment}</p>
+    <ul class="account-orders">{JSON.parse(order.line_items).map(line => <li>{line.quantity} × {line.name}{line.sku && ' · ' + line.sku}</li>)}</ul>
+    <p>Total: {order.amount} {order.currency}</p>
+    <dl class="store-totals">{fields.filter(key => header[key]).map(key => <div><dt>{key}</dt><dd>{header[key]}</dd></div>)}</dl>
+    <p><a href="/pages/contact">Contact us about this order</a></p>
+  </> : <p>Sign in with the email used for this order.</p>}
+  <p><a href="/account">My account</a></p>
+</section></Store>
