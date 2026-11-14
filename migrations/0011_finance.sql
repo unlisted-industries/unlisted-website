@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS finance_transactions (
   account TEXT NOT NULL CHECK (account IN ('bank', 'cash', 'unallocated')),
   amount INTEGER NOT NULL CHECK (amount BETWEEN 1 AND 1000000000),
   drop_id TEXT REFERENCES finance_drops(id),
-  note TEXT NOT NULL DEFAULT '' CHECK (length(note) &lt;= 500),
+  note TEXT NOT NULL DEFAULT '' CHECK (length(note) <= 500),
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 CREATE INDEX IF NOT EXISTS finance_transactions_date ON finance_transactions(occurred_on DESC);
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS finance_balance_reports (
   account TEXT NOT NULL CHECK (account IN ('bank', 'cash')),
   reported_on TEXT NOT NULL CHECK (reported_on GLOB '????-??-??'),
   balance INTEGER NOT NULL CHECK (balance BETWEEN -1000000000 AND 1000000000),
-  note TEXT NOT NULL DEFAULT '' CHECK (length(note) &lt;= 500),
+  note TEXT NOT NULL DEFAULT '' CHECK (length(note) <= 500),
   created_at INTEGER NOT NULL DEFAULT (unixepoch()),
   UNIQUE(account, reported_on)
 );
@@ -48,9 +48,9 @@ CREATE TABLE IF NOT EXISTS finance_pr_gifts (
   variant_id TEXT NOT NULL REFERENCES variants(id),
   quantity INTEGER NOT NULL CHECK (quantity BETWEEN 1 AND 100),
   recipient TEXT NOT NULL CHECK (length(recipient) BETWEEN 1 AND 100),
-  cost_per_unit INTEGER NOT NULL CHECK (cost_per_unit &gt;= 0),
+  cost_per_unit INTEGER NOT NULL CHECK (cost_per_unit >= 0),
   influencer_fee INTEGER NOT NULL DEFAULT 0 CHECK (influencer_fee BETWEEN 0 AND 100000000),
-  note TEXT NOT NULL DEFAULT '' CHECK (length(note) &lt;= 500),
+  note TEXT NOT NULL DEFAULT '' CHECK (length(note) <= 500),
   created_at INTEGER NOT NULL DEFAULT (unixepoch())
 );
 CREATE INDEX IF NOT EXISTS finance_pr_gifts_date ON finance_pr_gifts(gifted_on DESC);
