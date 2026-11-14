@@ -4,12 +4,13 @@ import { applyFinanceAction } from '../../lib/finance.js';
 import { extractImport,confirmImport } from '../../lib/finance-import.js';
 import { syncMeta } from '../../lib/finance-meta.js';
 import { askFinance } from '../../lib/finance-advice.js';
-import { financeAlerts } from '../../lib/finance-automation.js';
+import { financeAlerts,queueNotificationTest } from '../../lib/finance-automation.js';
 import { formData,formError,seeOther,StoreError } from '../../lib/http.js';
 export async function POST(context) {
  const user=await currentUser(env,context,'admin');if(!user)return new Response('Sign-in required',{status:401});
  try {
   const form=await formData(context.request,9*1024*1024),op=form.get('op');
+  if(op==='test_reminder'){if(form.get('confirmed')!=='yes')throw new StoreError('Confirm the notification test first.');await queueNotificationTest(env);return seeOther('/admin/finance?tab=settings&saved=1');}
   if(op==='advice'){await limitRequest(env.DB,context.request,'finance-advice',{subject:user.email,limit:10,window:3600});const id=await askFinance(env,context.url,form,user.email);return seeOther('/admin/finance?advice='+id);}
   if(op==='extract') {
    await limitRequest(env.DB,context.request,'finance-ai',{subject:user.email,limit:10,window:3600});
