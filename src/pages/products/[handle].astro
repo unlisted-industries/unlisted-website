@@ -10,7 +10,7 @@ if (!product) Astro.response.status = 404;
 const variant = product?.variants.find((item) => item.id === Astro.url.searchParams.get('variant') && available(item))
   ?? product?.variants.find(available) ?? product?.variants[0];
 const hasCozyMatch = Boolean(product && Object.hasOwn(cozyMatch, product.handle));
-const chart = mediaUrl(product?.size_chart_key);
+const chart = product?.handle === 'cozy-straight-leg-sweats-grey' ? '/theme/catalog/straight-leg-size-chart.webp' : mediaUrl(product?.size_chart_key);
 ---
 <Store title={product?.title ?? 'Page not found'} noIndex={!product}>
   {!product ? <section class="page"><h1 class="page-title">PRODUCT NOT FOUND</h1><p><a href="/">Back to the collection</a></p></section>
