@@ -1,3 +1,4 @@
+import { ensureFinance } from './finance-schema.js';
 import migration from '../../migrations/0007_order_returns.sql?raw';
 import { all, initializeTables, isToken, makeToken, statements, unixNow } from './db.js';
 import { checked, priceValue, quantityValue, StoreError, textValue } from './http.js';
@@ -66,6 +67,7 @@ const transitions = {
 
 export async function manageReturn(env, form) {
   const db = env.DB;
+  await ensureFinance(db);
   const id = form.get('id');
   const action = form.get('operation');
   if (!isToken(id, 16) || !Object.hasOwn(transitions, action)) throw new StoreError('Choose a valid return action.');
@@ -115,6 +117,12 @@ export async function manageReturn(env, form) {
         SELECT coalesce(sum(refund_amount), 0) FROM order_returns WHERE order_id = orders.id AND state = 'completed')`,
     reference, row.order_id, id, marker]);
   }
+  if (action === 'receive') changes.push([`INSERT OR IGNORE INTO finance_return_inventory(return_id,restocked)
+    SELECT id,? FROM order_returns WHERE id=? AND last_action=?`, Number(checked(form,'restock')),id,marker]);
+  if (action === 'approve' && row.kind === 'exchange') changes.push([`INSERT OR IGNORE INTO finance_exchange_costs(return_id,unit_cost,variant_id,drop_id)
+    SELECT r.id,c.unit_cost,v.id,d.drop_id FROM order_returns r JOIN variants v ON v.id=r.replacement_id
+    LEFT JOIN finance_variant_costs c ON c.variant_id=v.id LEFT JOIN finance_drop_products d ON d.product_id=v.product_id
+    WHERE r.id=? AND r.last_action=?`,id,marker]);
   const [result] = await statements(db, changes);
   if (result.meta.changes !== 1) throw new StoreError('This action is no longer available. Check the request status, replacement stock or refundable balance.', 409);
   return '/admin/returns?return=' + id;
