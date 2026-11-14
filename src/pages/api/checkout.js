@@ -1,3 +1,4 @@
+import { ensureFinance } from '../../lib/finance-schema.js';
 import { env } from 'cloudflare:workers';
 import { getSettings } from '../../lib/catalog.js';
 import { cartId } from '../../lib/cart.js';
@@ -24,10 +25,13 @@ export async function POST(context) {
       version: quantityValue(form.get('cart_version'), 0, 999999999),
       total: quantityValue(form.get('quoted_total'), 0, 99999999999),
     };
+    await ensureFinance(env.DB);
     const { order, created } = await placeOrder(env.DB, {
       id: cartId(context), key: textValue(form, 'checkout_key', 48), input, expected,
       user: await currentUser(env, context), visitor,
     });
+    const campaign=context.cookies.get('unlisted_campaign')?.value;
+    if(created&&visitor&&/^\d{1,30}$/.test(campaign||'')){try{await env.DB.prepare("INSERT OR IGNORE INTO finance_order_attribution(source,order_id,campaign_id) VALUES('website',?,?)").bind(order.id,campaign).run();}catch{console.error('Order attribution was not saved');}}
     const orderPath = '/orders/' + order.id;
     if (order.payment_method === 'cod') {
       if (created) await sendReceipt(env, order, context.url.origin);
