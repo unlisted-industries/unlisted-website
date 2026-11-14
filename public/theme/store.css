@@ -23,3 +23,14 @@ body.store-menu-open { overflow: hidden; }
   .overlay, .overlay .menu { transition: none; }
 }
 .unl-size-chart, .unl-size-chart img { display: block; width: 100%; max-width: 100%; height: auto; }
+.header-actions { display:flex; align-items:center; gap:14px; }
+.header-actions .account-btn { display:inline-flex; align-items:center; justify-content:center; width:44px; height:44px; color:var(--navy); }
+.account-btn svg { width:24px; height:24px; }
+.store-checkout .form .payment-options .payment-option { display:flex; flex-direction:row; align-items:center; justify-content:flex-start; gap:12px; margin:0; padding:12px 8px; min-height:48px; cursor:pointer; }
+.store-checkout .form .payment-option input[type=radio] { appearance:auto; display:block; flex:0 0 20px; width:20px; height:20px; min-height:20px; margin:0; padding:0; accent-color:var(--navy); }
+.payment-option span { display:block; }
+.payment-option small { display:block; color:var(--muted); font-size:12px; margin-top:3px; }
+.payment-option:has(input:checked) { background:#f3f4f6; }
+.payment-option:has(input:disabled) { opacity:.6; cursor:default; }
+.profile-form { margin:28px 0; }
+@media(max-width:480px) { .header-actions{gap:4px;} .store-checkout{padding-left:16px;padding-right:16px;} }
