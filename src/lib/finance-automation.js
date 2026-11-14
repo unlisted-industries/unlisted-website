@@ -49,3 +49,9 @@ export async function runFinanceAutomation(env,now=new Date()) {
   if(!status?.last_success||+now/1000-status.last_success>6*3600)await syncMeta(env);
  }
 }
+
+export async function queueNotificationTest(env,now=new Date()) {
+ await ensureFinance(env.DB);
+ await notify(env,'delivery-test:'+financeDay(now),'test','Finance notification delivery test','Your UNLISTED finance notifications are working. Your daily bank statement and balance reminder is scheduled for 9 PM Cairo time.',true);
+ await financeAlerts(env,now);
+}
