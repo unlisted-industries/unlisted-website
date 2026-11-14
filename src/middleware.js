@@ -1,5 +1,6 @@
 import { defineMiddleware } from 'astro:middleware';
 import { env } from 'cloudflare:workers';
+import { ensureWorkspace } from './lib/workspace-schema.js';
 import { recordVisitor } from './lib/live-visitors.js';
 
 const protectedPaths = /^(?:\/(?:admin|account|orders|api|cart|checkout|payment-test)(?:\/|$))/;
@@ -7,6 +8,7 @@ const storefrontPaths = /^\/(?:$|products\/|collections\/|pages\/)/;
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { request, url } = context;
+  await ensureWorkspace(env.DB);
   if (request.method === 'GET' && storefrontPaths.test(url.pathname)) {
     try {
       context.locals.visitor = await recordVisitor(context, env);
