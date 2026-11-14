@@ -1,0 +1,16 @@
+---
+import { displayDate } from '../../lib/content.js';
+const { order } = Astro.props;
+const source = order.data ? JSON.parse(order.data) : {};
+const header = source.header ?? {};
+const fields = Object.entries(header).filter(([,value]) => value !== '' && value !== null && typeof value !== 'object');
+---
+<section class="panel"><h2>Order {order.order_number}</h2>
+  <p>{displayDate(order.created_at)} · {order.cancelled_at ? 'Cancelled' : order.fulfillment} · {order.payment}</p>
+  <p>{order.amount} {order.currency} · <a href={'/admin/customers?customer=' + encodeURIComponent(order.email ?? '')}>{order.email}</a></p>
+  <ul>{JSON.parse(order.line_items).map(line => <li>{line.quantity} × {line.name}{line.sku && ' · ' + line.sku}</li>)}</ul>
+  <h2>Original order information</h2>
+  <dl class="admin-kv">{fields.map(([key,value]) => <div><dt>{key}</dt><dd>{String(value)}</dd></div>)}</dl>
+  {Array.isArray(source.rows) && <details><summary>Complete original line records</summary><pre class="preserve">{JSON.stringify(source.rows,null,2)}</pre></details>}
+  <p class="muted">The original order information is preserved. Contact the customer before making adjustments to historical transactions.</p>
+</section>

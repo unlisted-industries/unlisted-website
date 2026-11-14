@@ -18,5 +18,5 @@ export const websiteSections = [
   { key: 'analytics', label: 'Analytics' },
   { key: 'online-store', label: 'Online Store' },
   { key: 'inbox', label: 'Inbox' },
-  { key: 'settings', label: 'Settings', children: [{ key: 'shipping', label: 'Shipping' }, { key: 'migration', label: 'Shopify migration' }] },
+  { key: 'settings', label: 'Settings', children: [{ key: 'shipping', label: 'Shipping' }, { key: 'migration', label: 'Data import' }] },
 ];

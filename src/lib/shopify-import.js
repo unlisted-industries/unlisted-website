@@ -22,10 +22,10 @@ function validate(bundle) {
       !rows(bundle.variants, (row) => string(row.id, 100) && row.id && handle(row.handle) && string(row.sku, 100) &&
         (row.available === null || (Number.isSafeInteger(row.available) && row.available >= 0 && row.available <= 1000000))) ||
       !rows(bundle.discounts ?? [], (row) => string(row.Name, 255) && row.Name && string(row.Type, 120) && string(row.Status, 40))) {
-    throw new StoreError('Choose a valid Shopify migration file prepared for this workspace.');
+    throw new StoreError('Choose a valid migration file prepared for this workspace.');
   }
   for (const [list, key] of [[bundle.orders, 'id'], [bundle.customers, 'id'], [bundle.products, 'handle'], [bundle.variants, 'id'], [bundle.discounts ?? [], 'Name']]) {
-    if (new Set(list.map((row) => row[key])).size !== list.length) throw new StoreError('The migration file contains duplicate Shopify records.');
+    if (new Set(list.map((row) => row[key])).size !== list.length) throw new StoreError('The migration file contains duplicate source records.');
   }
   if (!bundle.orders.length && !bundle.customers.length && !bundle.products.length) throw new StoreError('The migration file is empty.');
 }
@@ -33,7 +33,7 @@ function validate(bundle) {
 export async function importShopify(env, form) {
   const file = form.get('snapshot');
   if (!(file instanceof File) || file.size === 0 || file.size > 750 * 1024) {
-    throw new StoreError('Choose a Shopify migration JSON file under 750 KB.');
+    throw new StoreError('Choose a migration JSON file under 750 KB.');
   }
   const raw = await file.text();
   let bundle;
@@ -89,7 +89,7 @@ export async function importShopify(env, form) {
         OR (variants.sku = '' AND supplied.sku <> ''))`, variants, transfer],
   ]);
   if (!result.meta.changes && !await db.prepare('SELECT 1 FROM shopify_imports WHERE digest = ?').bind(digest).first()) {
-    throw new StoreError('A newer Shopify snapshot has already been imported.', 409);
+    throw new StoreError('A newer source snapshot has already been imported.', 409);
   }
   return '/admin/migration';
 }

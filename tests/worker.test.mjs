@@ -11,9 +11,11 @@ const origin = 'https://unlisted.test';
 const secret = 'local-test-hmac';
 const owner = 'owner@example.invalid';
 const ownerPassword = 'fixture-owner-password-one';
-const runtimeSchemas = new Set(['0006_owner_passwords.sql', '0007_order_returns.sql', '0008_shopify_import.sql', '0009_paymob_sandbox.sql', '0010_live_visitors.sql']);
+const runtimeSchemas = new Set(['0006_owner_passwords.sql', '0007_order_returns.sql', '0008_shopify_import.sql', '0009_paymob_sandbox.sql', '0010_live_visitors.sql', '0013_independent_workspace.sql']);
 const mail = [];
 const intents = [];
+const telegram = [];
+let failTelegram = false;
 let runtime, db, admin;
 
 function browser() {
@@ -55,6 +57,7 @@ before(async () => {
     bindings: {
       CHECKOUT_ENABLED: 'true', ADMIN_EMAILS: owner, ADMIN_ORIGIN: origin, EMAIL_FROM: 'UNLISTED <sender@example.invalid>',
       RESEND_API_KEY: 'test-email-key', PAYMOB_SECRET_KEY: 'sk_test_fixture', PAYMOB_PUBLIC_KEY: 'pk_test_fixture',
+      TELEGRAM_BOT_TOKEN:'123456:fixture', TELEGRAM_CHAT_ID:'123', PAYMOB_TEST_WALLET_INTEGRATION_IDS:'202',
       PAYMOB_INTEGRATION_IDS: '999', PAYMOB_TEST_INTEGRATION_IDS: '101', PAYMOB_HMAC_SECRET: secret,
       PAYMENT_ORIGIN: origin, PREVIEW_PAYMENT_ORIGIN: origin,
     },
@@ -63,6 +66,10 @@ before(async () => {
       if (url.href === 'https://api.resend.com/emails') {
         mail.push(await request.json());
         return Response.json({ id: 'test-email-' + mail.length });
+      }
+      if (url.origin === 'https://api.telegram.org') {
+        telegram.push(await request.json());
+        return Response.json({ok:!failTelegram},{status:failTelegram ? 503 : 200});
       }
       if (url.href === 'https://accept.paymob.com/v1/intention/') {
         intents.push(await request.json());
@@ -335,8 +342,8 @@ test('storefront search, size chart and COZY matching item follow the supplied t
   assert.doesNotMatch(search, /COZY STRAIGHT LEG SWEATS - GREY/);
   const sweats = '/products/cozy-straight-leg-sweats-grey';
   const product = await (await web(sweats)).text();
-  assert.match(product, /shopify-section-group-header-group/);
-  assert.match(product, /\/media\/shop\/sweatpants-chart\.png/);
+  assert.match(product, /unlisted-section-group-header-group/);
+  assert.match(product, /\/theme\/catalog\/straight-leg-size-chart\.webp/);
   assert.match(product, /COMPLETE THE LOOK/);
   assert.equal((await web('/api/cart', { action: 'add', variant: 's' })).headers.get('Location'), '/cart');
   assert.match(await (await web('/cart')).text(), /COMPLETE THE LOOK/);
@@ -445,13 +452,13 @@ test('Shopify import is private, repeatable, and preserves native orders and ver
   for (let attempt = 0; attempt < 2; attempt++) {
     assert.equal((await admin('/admin/action', form())).headers.get('Location'), '/admin/migration?saved=1');
   }
-  assert.match((await admin('/admin/action', form({ ...snapshot, exportedAt: exportedAt - 1 }))).headers.get('Location'), /newer\+Shopify/);
+  assert.match((await admin('/admin/action', form({ ...snapshot, exportedAt: exportedAt - 1 }))).headers.get('Location'), /newer\+source/);
   assert.equal(await orderCount(), countBefore);
   assert.equal(await db.prepare('SELECT count(*) AS count FROM shopify_orders').first('count'), 1);
   assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id = 'v'").first('inventory'), stockBefore);
   assert.deepEqual(await db.prepare("SELECT inventory, sku FROM variants WHERE id = 'v-import'").first(), { inventory: 3, sku: 'MIGRATED-XS' });
   assert.match(await (await admin('/admin/orders?source=shopify')).text(), /#SHOPIFY-42/);
-  assert.match(await (await admin('/admin/migration')).text(), /Latest Shopify snapshot/);
+  assert.match(await (await admin('/admin/migration')).text(), /Latest data snapshot/);
   assert.match(await (await admin('/admin/discounts')).text(), /ARCHIVE-BUNDLE/);
   assert.equal(await db.prepare("SELECT 1 FROM discounts WHERE code = 'ARCHIVE-BUNDLE'").first(), null);
   const buyer = browser();
@@ -748,4 +755,85 @@ test('statement import waits for confirmation, blocks duplicates and keeps origi
  assert.equal(await db.prepare("SELECT count(*) n FROM finance_journals WHERE source=?").bind('import:'+id+':0').first('n'),1);
  const repeated=await web('/admin/finance-action',form);assert.equal(new URL(repeated.headers.get('Location'),origin).searchParams.get('import'),id);
  assert.equal(await db.prepare('SELECT state FROM finance_imports WHERE id=?').bind(id).first('state'),'confirmed');
+});
+
+test('account profiles preserve verified identity and unify old and new order history privately', async () => {
+  const email='cardbuyer@example.invalid';
+  await db.prepare(`INSERT INTO shopify_orders VALUES ('314','#1031',?,unixepoch()-86400,NULL,'paid','fulfilled','680.00','EGP','[{"name":"Historical item","quantity":1}]')`).bind(email.toUpperCase()).run();
+  const web=browser();
+  assert.equal((await web('/orders/history/314')).status,404);
+  await web('/account/session',{action:'request',email});
+  const token=/token=([a-f0-9]{64})/.exec(mail.at(-1).text)[1];
+  await web('/account/session',{action:'confirm',token});
+  const update={action:'profile',name:'Updated Buyer',phone:'01012345678',address:'Updated address',city:'Cairo',governorate:'cairo'};
+  assert.equal((await web('/account/session',update,{Origin:'https://wrong.invalid'})).status,403);
+  assert.equal((await web('/account/session',update)).headers.get('Location'),'/account?saved=1');
+  const page=await (await web('/account')).text();
+  assert.match(page,/#1031/);
+  assert.match(page,/\/orders\/[a-f0-9]{32}/);
+  assert.doesNotMatch(page,/Shopify history|UNLISTED orders/);
+  assert.match(page,/Updated address/);
+  assert.equal((await web('/orders/history/314')).status,200);
+  assert.equal((await browser()('/orders/history/314')).status,404);
+  assert.equal(await db.prepare('SELECT count(*) count FROM customers WHERE email=? COLLATE NOCASE').bind(email).first('count'),1);
+  const ownerWeb=browser();
+  assert.equal((await ownerWeb('/admin/session',{action:'password',password:ownerPassword},{'CF-Connecting-IP':'192.0.2.211'})).headers.get('Location'),'/admin');
+  const list=await (await ownerWeb('/admin/orders?q=1031')).text();
+  assert.match(list,/#1031/);
+  const detail=await (await ownerWeb('/admin/orders?order=history%3A314')).text();
+  assert.match(detail,/Historical item/);
+  const customer=await (await ownerWeb('/admin/customers?customer='+email)).text();
+  assert.match(customer,/Updated address/);
+  assert.match(customer,/#1031/);
+});
+
+test('checkout keeps details through edits and sends one branded notification with durable retry', async () => {
+  await db.prepare("UPDATE variants SET inventory=5 WHERE id='v'").run();
+  const web=browser();
+  const input=await customerCheckout(web,'notify@example.invalid','cod','');
+  const edit=await web('/checkout',{...input,edit:'1'});
+  assert.match(await edit.text(),/value="Test Buyer"/);
+  assert.match(await (await web('/checkout')).text(),/Test address/);
+  failTelegram=true;
+  const submitted=await web('/api/checkout',input);
+  const path=submitted.headers.get('Location');
+  const id=path.split('/').at(-1);
+  assert.match(path,/^\/orders\/[a-f0-9]{32}$/);
+  assert.equal(await db.prepare('SELECT sent_at FROM order_notifications WHERE order_id=?').bind(id).first('sent_at'),null);
+  const count=telegram.length;
+  await db.prepare('UPDATE order_notifications SET next_attempt_at=0 WHERE order_id=?').bind(id).run();
+  failTelegram=false;
+  await web('/api/checkout',input);
+  assert.equal(telegram.length,count+1);
+  assert.match(telegram.at(-1).text,/UNLISTED · NEW ORDER/);
+  assert.match(telegram.at(-1).text,/notify@example.invalid/);
+  assert.match(telegram.at(-1).text,/Test hoodie/);
+  assert.match(telegram.at(-1).text,/Payment: cod/);
+  assert.equal(telegram.at(-1).disable_notification,false);
+  assert.ok(await db.prepare('SELECT sent_at FROM order_notifications WHERE order_id=?').bind(id).first('sent_at'));
+  await web('/api/checkout',input);
+  assert.equal(telegram.length,count+1);
+  assert.equal(await db.prepare('SELECT count(*) count FROM checkout_drafts WHERE cart_id=(SELECT cart_id FROM orders WHERE id=?)').bind(id).first('count'),0);
+});
+
+test('wallet uses its separate Paymob integration and rejects a signed capture for the wrong method', async () => {
+  const web=browser();
+  const input=await customerCheckout(web,'wallet@example.invalid','wallet','');
+  const submitted=await web('/api/checkout',input);
+  assert.match(submitted.headers.get('Location'),/^https:\/\/accept.paymob.com\/unifiedcheckout\//);
+  const intent=intents.at(-1);
+  assert.deepEqual(intent.payment_methods,[202]);
+  assert.equal(intent.items.reduce((sum,line)=>sum+line.amount*line.quantity,0),intent.amount);
+  assert.ok(intent.items.some(line=>line.name==='Test hoodie'));
+  assert.ok(intent.items.some(line=>line.name==='Delivery'));
+  const order=await db.prepare('SELECT * FROM orders WHERE email=?').bind('wallet@example.invalid').first();
+  assert.equal(await db.prepare('SELECT method FROM order_payment_choices WHERE order_id=?').bind(order.id).first('method'),'wallet');
+  const transaction={id:987654,order:{id:Number(order.provider_order_id)},amount_cents:order.total,currency:'EGP',integration_id:101,
+    success:true,pending:false,error_occured:false,is_voided:false,is_refunded:false,is_auth:false,is_capture:false,is_standalone_payment:true,has_parent_transaction:false};
+  const send=async txn=>runtime.dispatchFetch(origin+'/api/paymob?hmac='+createHmac('sha512',secret).update(paymobSignedValue(txn)).digest('hex'),{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'TRANSACTION',obj:txn})});
+  assert.equal((await send(transaction)).status,409);
+  assert.equal((await send({...transaction,integration_id:202})).status,204);
+  assert.equal(await db.prepare('SELECT payment_status FROM orders WHERE id=?').bind(order.id).first('payment_status'),'paid');
+  assert.equal((await send({...transaction,integration_id:202})).status,204);
 });

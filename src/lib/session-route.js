@@ -1,3 +1,4 @@
+import { saveCustomerProfile } from './customer-profile.js';
 import { confirmLogin, logout, requestLogin } from './auth.js';
 import { passwordsReady, saveOwnerPassword, setupOwnerPassword, signInWithPassword } from './admin-password.js';
 import { isToken } from './db.js';
@@ -22,6 +23,10 @@ export async function sessionPost(env, context, purpose) {
       destination = isToken(token, 32) ? '/admin/verify#token=' + token : '/admin/verify';
       await setupOwnerPassword(env, context, form, token);
       return seeOther('/admin/login?password-set=1');
+    }
+    if (purpose === 'account' && form.get('action') === 'profile') {
+      await saveCustomerProfile(env, context, form);
+      return seeOther('/account?saved=1');
     }
     switch (form.get('action')) {
       case 'confirm': {

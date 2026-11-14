@@ -7,7 +7,7 @@ import { cartId, getCart } from '../lib/cart.js';
 import { currentUser } from '../lib/auth.js';
 import { checkoutInput, checkoutReady, quote, shippingRates } from '../lib/checkout.js';
 import { formData, StoreError } from '../lib/http.js';
-import { cardReady } from '../lib/paymob.js';
+import { cardReady, walletReady } from '../lib/paymob.js';
 import { makeToken } from '../lib/db.js';
 import { money } from '../lib/content.js';
 
@@ -16,15 +16,20 @@ const [settings, cart, rates, user] = await Promise.all([
   getSettings(Astro, env.DB), getCart(env.DB, id), shippingRates(env.DB), currentUser(env, Astro),
 ]);
 const card = settings.card_enabled && cardReady(env);
-const enabled = checkoutReady(env, settings) && rates.length && (settings.cod_enabled || card);
-let input, review, error;
+const wallet = settings.card_enabled && walletReady(env);
+const profile = user ? await env.DB.prepare('SELECT * FROM customer_profiles WHERE customer_id=?').bind(user.id).first() : null;
+const enabled = checkoutReady(env, settings) && rates.length && (settings.cod_enabled || card || wallet);
+const saved = await env.DB.prepare('SELECT data FROM checkout_drafts WHERE cart_id=? AND expires_at>unixepoch()').bind(id).first('data');
+let input = saved ? JSON.parse(saved) : undefined, review, error;
 if (Astro.request.method === 'POST' && enabled) {
   try {
-    input = checkoutInput(await formData(Astro.request));
-    if (!(input.method === 'cod' && settings.cod_enabled || input.method === 'card' && card)) {
+    const form = await formData(Astro.request);
+    input = checkoutInput(form);
+    await env.DB.prepare('INSERT INTO checkout_drafts (cart_id,data,expires_at) VALUES (?,?,unixepoch()+1800) ON CONFLICT(cart_id) DO UPDATE SET data=excluded.data,expires_at=excluded.expires_at').bind(id,JSON.stringify(input)).run();
+    if (!(input.method === 'cod' && settings.cod_enabled || input.method === 'card' && card || input.method === 'wallet' && wallet)) {
       throw new StoreError('Select an available payment method.');
     }
-    review = await quote(env.DB, id, input.governorate, input.coupon);
+    if (form.get('edit') !== '1') review = await quote(env.DB, id, input.governorate, input.coupon);
   } catch (problem) {
     error = problem instanceof StoreError ? problem.message : 'Checkout could not be reviewed. Try again.';
   }
@@ -39,7 +44,7 @@ const ready = Boolean(enabled && cart.items.length);
     {!cart.items.length ? <p>Your cart is empty. <a href="/">Shop the collection</a>.</p>
       : !ready ? <p>Checkout is currently closed. <a href="/cart">Return to your cart</a>.</p>
       : review ? <>
-        <p>{input.name} · {input.email}</p>
+        <p>{input.name} · {input.email} · {input.phone}</p>
         <p>{input.address}, {input.city}, {review.rate.label}, Egypt</p>
         <ul class="account-orders">{review.items.map((line) => <li>{line.quantity} × {line.title} · {line.variant_title} · {money(line.quantity * line.price)}</li>)}</ul>
         <dl class="store-totals">
@@ -48,7 +53,7 @@ const ready = Boolean(enabled && cart.items.length);
           {review.discount > 0 && <div><dt>Discount ({input.coupon})</dt><dd>−{money(review.discount)}</dd></div>}
           <div><dt><strong>Total</strong></dt><dd><strong>{money(review.total)}</strong></dd></div>
         </dl>
-        <p>{input.method === 'cod' ? 'Cash on delivery' : 'Pay by card on Paymob'}</p>
+        <p>{input.method === 'cod' ? 'Cash on Delivery' : input.method === 'wallet' ? 'Wallet · secure Paymob checkout' : 'Card · secure Paymob checkout'}</p>
         <form method="post" action="/api/checkout">
           {Object.entries({ name: input.name, email: input.email, phone: input.phone, address: input.address,
             city: input.city, governorate: input.governorate, discount: input.coupon, payment_method: input.method,
@@ -56,27 +61,34 @@ const ready = Boolean(enabled && cart.items.length);
               <input type="hidden" name={key} value={value} />)}
           <button class="btn" type="submit">{input.method === 'cod' ? 'PLACE ORDER' : 'CONTINUE TO SECURE PAYMENT'}</button>
         </form>
-        <p><a href="/checkout">Edit delivery or payment details</a></p>
+        <p><a href="/cart">Edit cart</a></p>
+        <form method="post" action="/checkout" class="form">
+          {Object.entries({name:input.name,email:input.email,phone:input.phone,address:input.address,city:input.city,
+            governorate:input.governorate,discount:input.coupon,payment_method:input.method,edit:'1'}).map(([key,value]) => <input type="hidden" name={key} value={value} />)}
+          <button class="btn" type="submit">EDIT DELIVERY OR PAYMENT DETAILS</button>
+        </form>
       </> : <>
         <p>Delivery in Egypt. {!user && <a href="/account">Sign in</a>}</p>
         <dl class="store-totals"><div><dt>Cart subtotal</dt><dd>{money(cart.subtotal)}</dd></div></dl>
         <form method="post" action="/checkout" class="form">
           <label>Full name <input name="name" autocomplete="name" required maxlength="100" value={input?.name ?? user?.name} /></label>
           <label>Email <input name="email" type="email" autocomplete="email" required maxlength="254" value={input?.email ?? user?.email} /></label>
-          <label>Phone <input name="phone" type="tel" autocomplete="tel" required maxlength="24" value={input?.phone} /></label>
-          <label>Street, building and apartment <textarea name="address" autocomplete="street-address" required maxlength="350">{input?.address}</textarea></label>
-          <label>City or district <input name="city" autocomplete="address-level2" required maxlength="100" value={input?.city} /></label>
+          <label>Phone <input name="phone" type="tel" autocomplete="tel" required maxlength="24" value={input?.phone ?? profile?.phone} /></label>
+          <label>Street, building and apartment <textarea name="address" autocomplete="street-address" required maxlength="350">{input?.address ?? profile?.address}</textarea></label>
+          <label>City or district <input name="city" autocomplete="address-level2" required maxlength="100" value={input?.city ?? profile?.city} /></label>
           <label>Governorate
             <select name="governorate" autocomplete="address-level1" required>
               <option value="">Choose your governorate</option>
-              {rates.map((rate) => <option value={rate.code} selected={input?.governorate === rate.code}>{rate.label} · {money(rate.amount, true)}</option>)}
+              {rates.map((rate) => <option value={rate.code} selected={(input?.governorate ?? profile?.governorate) === rate.code}>{rate.label} · {money(rate.amount, true)}</option>)}
             </select>
           </label>
           <label>Discount code <input name="discount" maxlength="32" value={input?.coupon} /></label>
-          <fieldset>
+          <fieldset class="payment-options">
             <legend>Payment</legend>
-            {Boolean(settings.cod_enabled) && <label><input type="radio" name="payment_method" value="cod" checked={input?.method !== 'card'} required /> Cash on delivery</label>}
-            {Boolean(card) && <label><input type="radio" name="payment_method" value="card" checked={input?.method === 'card' || !settings.cod_enabled} required /> Card or wallet</label>}
+            {Boolean(settings.cod_enabled) && <label class="payment-option"><input type="radio" name="payment_method" value="cod" checked={input?.method === 'cod' || !input?.method} required /><span>Cash on Delivery</span></label>}
+            {Boolean(card) && <label class="payment-option"><input type="radio" name="payment_method" value="card" checked={input?.method === 'card' || !input?.method && !settings.cod_enabled} required /><span>Card</span></label>}
+            <label class="payment-option"><input type="radio" name="payment_method" value="wallet" disabled={!wallet} checked={input?.method === 'wallet' || !input?.method && !settings.cod_enabled && !card && wallet} required /><span>Wallet{!wallet && <small>Currently unavailable</small>}</span></label>
+            {(card || wallet) && <p>Secure payment on Paymob after you review your order.</p>}
           </fieldset>
           <button class="btn" type="submit">REVIEW ORDER</button>
         </form>

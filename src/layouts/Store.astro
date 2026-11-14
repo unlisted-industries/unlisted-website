@@ -7,7 +7,7 @@ import { safeLink } from '../lib/content.js';
 const { title, description = 'A Matter of Taste.', noIndex = false } = Astro.props;
 const [store, count] = await Promise.all([getSettings(Astro, env.DB), cartCount(env.DB, Astro)]);
 const collections = store.navigation.filter((link) => link.group === 'collections' && safeLink(link.url));
-const navigation = store.navigation.filter((link) => link.group !== 'collections' && safeLink(link.url));
+const navigation = store.navigation.filter((link) => link.group !== 'collections' && safeLink(link.url) && !/size[ -]?guide/i.test(link.label) && link.url !== '#SizeGuide');
 const supportOrder = ['/pages/contact', '/pages/shipping', '/pages/about-us'];
 const support = supportOrder.flatMap((url) => navigation.filter((link) => link.url === url));
 ---
@@ -32,13 +32,17 @@ const support = supportOrder.flatMap((url) => navigation.filter((link) => link.u
   </head>
   <body>
     <div class="shell">
-      <div class="shopify-section-group-header-group">
+      <div class="unlisted-section-group-header-group">
         <a class="visually-hidden skip-link" href="#MainContent">Skip to content</a>
         <header class="header">
           <div class="head-side">
             <button class="menu-btn" type="button" data-open-menu aria-label="Open menu" aria-controls="MenuOverlay" aria-expanded="false"><i></i><i></i><i></i></button>
             <a class="logo-link" href="/" aria-label="UNLISTED home" style="width:118px"><span class="site-logo" aria-hidden="true"></span></a>
           </div>
+          <div class="header-actions">
+          <a class="account-btn" href="/account" aria-label="My account">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 22v-3a8 8 0 0 1 16 0v3"/></svg>
+          </a>
           <a class="cart-btn unl-header-cart" href="/cart" aria-label={'View shopping cart, ' + count + ' items'}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
               <circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/>
@@ -46,6 +50,7 @@ const support = supportOrder.flatMap((url) => navigation.filter((link) => link.u
             </svg>
             <span class="cart-count">{count}</span>
           </a>
+          </div>
         </header>
         <div class="overlay" id="MenuOverlay" aria-hidden="true" inert>
           <div class="menu" role="dialog" aria-modal="true" aria-label="Main menu">
@@ -68,7 +73,6 @@ const support = supportOrder.flatMap((url) => navigation.filter((link) => link.u
           <div>
             <h3>SUPPORT</h3>
             {support.map((link) => <a href={link.url}>{link.url === '/pages/contact' && link.label === 'Contact Us' ? 'Contact us' : link.label}</a>)}
-            <a href="#SizeGuide" data-open-size-guide>Size guide</a>
           </div>
         </div>
         <div class="footer-bottom"><span class="footer-logo" role="img" aria-label={store.name}></span><small>© {new Date().getUTCFullYear()}</small></div>

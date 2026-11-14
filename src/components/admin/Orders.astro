@@ -8,7 +8,8 @@ import { customerReturns, returnLabel } from '../../lib/returns.js';
 import { ensureShopifyImport } from '../../lib/shopify-import.js';
 import Fields from './Fields.astro';
 import Pagination from './Pagination.astro';
-import ShopifyHistory from './ShopifyHistory.astro';
+import HistoricalOrder from './HistoricalOrder.astro';
+import { unifiedOrders, unifiedCustomers, historicalOrder, orderHref, orderReference } from '../../lib/order-history.js';
 const { section } = Astro.props;
 const offset = queryOffset(Astro.url);
 const q = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 140);
@@ -17,32 +18,27 @@ const order = section === 'orders' && isToken(id, 16) ? await env.DB.prepare('SE
 const customerEmail = section === 'customers' ? Astro.url.searchParams.get('customer')?.slice(0, 254) : null;
 const inbox = Astro.url.searchParams.get('kind') === 'preorders' ? 'preorders' : 'messages';
 const queries = {
-  orders: () => all(env.DB.prepare(`SELECT id, email, name, status, payment_status, payment_method, total, created_at
-    FROM orders WHERE ? = '' OR instr(lower(email), lower(?)) > 0 OR instr(id, lower(?)) > 0
-    ORDER BY created_at DESC LIMIT 26 OFFSET ?`).bind(q, q, q, offset)),
-  customers: () => all(env.DB.prepare(`WITH addresses AS (
-      SELECT email, name, 0 AS orders, 0 AS archived FROM customers
-      UNION ALL SELECT email, max(name), count(*), 0 FROM orders GROUP BY email COLLATE NOCASE
-      UNION ALL SELECT email, '', 0, count(*) FROM shopify_orders WHERE email IS NOT NULL GROUP BY email COLLATE NOCASE
-    ) SELECT email, max(name) AS name, sum(orders) AS orders, sum(archived) AS archived FROM addresses
-      WHERE ? = '' OR instr(lower(email), lower(?)) > 0 OR instr(lower(name), lower(?)) > 0
-      GROUP BY email COLLATE NOCASE ORDER BY email LIMIT 26 OFFSET ?`).bind(q, q, q, offset)),
+  orders: () => unifiedOrders(env.DB,{q,offset}),
+  customers: () => unifiedCustomers(env.DB,q,offset),
   inbox: () => inbox === 'preorders'
     ? all(env.DB.prepare(`SELECT r.*, p.title AS product, v.title AS variant FROM preorder_requests r
       JOIN products p ON p.id = r.product_id JOIN variants v ON v.id = r.variant_id
       ORDER BY r.consent_at DESC LIMIT 26 OFFSET ?`).bind(offset))
     : all(env.DB.prepare('SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 26 OFFSET ?').bind(offset)),
 };
-const archive = section === 'orders' && Astro.url.searchParams.get('source') === 'shopify';
-const list = order || customerEmail || archive ? [] : await queries[section]();
+const history = section === 'orders' && id?.startsWith('history:') ? await historicalOrder(env.DB,id.slice(8)) : null;
+const list = order || customerEmail || history ? [] : await queries[section]();
+const chosenMethod = order ? await env.DB.prepare('SELECT method FROM order_payment_choices WHERE order_id=?').bind(order.id).first('method') ?? order.payment_method : '';
 const lines = order ? await orderLines(env.DB, order.id) : [];
 const payments = order ? await all(env.DB.prepare('SELECT * FROM payment_events WHERE order_id = ? ORDER BY created_at').bind(order.id)) : [];
 const returns = order ? (await customerReturns(env.DB, order)).requests : [];
-const customerOrders = customerEmail ? await all(env.DB.prepare('SELECT * FROM orders WHERE email = ? COLLATE NOCASE ORDER BY created_at DESC LIMIT 26 OFFSET ?').bind(customerEmail, offset)) : [];
+const customerOrders = customerEmail && !customerEmail.startsWith('history:') ? await unifiedOrders(env.DB,{email:customerEmail,offset}) : [];
 if (customerEmail) await ensureShopifyImport(env.DB);
-const profile = customerEmail ? await env.DB.prepare('SELECT data FROM shopify_customer_details WHERE email = ? LIMIT 1').bind(customerEmail).first('data') : null;
-const profileFields = ['First Name', 'Last Name', 'Phone', 'Default Address Address1', 'Default Address City', 'Accepts Email Marketing', 'Tags', 'Note'];
-const sourceProfile = profile ? JSON.parse(profile) : {};
+const profiles = customerEmail ? await all(env.DB.prepare(customerEmail.startsWith('history:')
+  ? 'SELECT data FROM shopify_customer_details WHERE source_id=?'
+  : 'SELECT data FROM shopify_customer_details WHERE email=? COLLATE NOCASE').bind(customerEmail.startsWith('history:') ? customerEmail.slice(8) : customerEmail)) : [];
+const currentProfile = customerEmail ? await env.DB.prepare(`SELECT c.name,c.email,p.phone,p.address,p.city,p.governorate
+  FROM customers c LEFT JOIN customer_profiles p ON p.customer_id=c.id WHERE c.email=? COLLATE NOCASE`).bind(customerEmail).first() : null;
 const base = '/admin/' + section;
 const label = { orders: 'Orders', customers: 'Customers', inbox: 'Inbox' }[section];
 const actions = order ? [
@@ -57,11 +53,11 @@ const actions = order ? [
 ---
 <div class="admin-heading">
   <div><p class="overline">STORE OPERATIONS</p>
-    <h1>{order ? 'Order ' + order.id.slice(0, 8).toUpperCase() : customerEmail ?? label}</h1>
+    <h1>{history ? 'Order ' + history.order_number : order ? 'Order ' + order.id.slice(0, 8).toUpperCase() : customerEmail ?? label}</h1>
     {(id || customerEmail) && <a class="quiet-link" href={base}>← Back to {section}</a>}
   </div>
 </div>
-{archive ? <ShopifyHistory /> : id && !order ? <p>Order was not found.</p> : order ? <>
+{history ? <HistoricalOrder order={history} /> : id && !order ? <p>Order was not found.</p> : order ? <>
   <div class="admin-two">
     <section class="panel">
       <h2>Items</h2>
@@ -82,7 +78,7 @@ const actions = order ? [
       <dl class="admin-kv">
         <div><dt>Placed</dt><dd>{displayDate(order.created_at)}</dd></div>
         <div><dt>Status</dt><dd><span class="pill">{order.status}</span></dd></div>
-        <div><dt>Payment</dt><dd>{order.payment_method.toUpperCase()} · {order.payment_status}</dd></div>
+        <div><dt>Payment</dt><dd>{chosenMethod.toUpperCase()} · {order.payment_status}</dd></div>
         <div><dt>Name</dt><dd>{order.name}</dd></div>
         <div><dt>Email</dt><dd><a href={'/admin/customers?customer=' + encodeURIComponent(order.email)}>{order.email}</a></dd></div>
         <div><dt>Phone</dt><dd>{order.phone}</dd></div>
@@ -123,10 +119,11 @@ const actions = order ? [
   {!list.length && <p class="muted">No {inbox === 'preorders' ? 'pre-orders' : 'messages'} yet.</p>}
   <Pagination offset={offset} more={list.length > 25} />
 </section> : <section class="panel">
-  {section === 'orders' && <div class="tabs"><a href="/admin/orders" aria-current="page">Store orders</a><a href="/admin/orders?source=shopify">Shopify archive</a><a href="/admin/returns">Returns &amp; exchanges</a></div>}
+  {section === 'orders' && <div class="tabs"><a href="/admin/orders" aria-current="page">All orders</a><a href="/admin/returns">Returns &amp; exchanges</a></div>}
   {customerEmail && <div class="admin-detail">
-    {profile && <><h2>Shopify customer profile</h2><dl class="admin-kv">{profileFields.filter((key) => typeof sourceProfile[key] === 'string' && sourceProfile[key]).map((key) => <div><dt>{key}</dt><dd>{sourceProfile[key]}</dd></div>)}</dl></>}
-    <p><a href={'/admin/orders?source=shopify&q=' + encodeURIComponent(customerEmail)}>View Shopify orders for this email</a></p>
+    <h2>Customer profile</h2>
+    {currentProfile && <dl class="admin-kv">{Object.entries(currentProfile).filter(([,value]) => value).map(([key,value]) => <div><dt>{key}</dt><dd>{value}</dd></div>)}</dl>}
+    {profiles.map(profile => <details class="admin-detail"><summary>Original profile information</summary><dl class="admin-kv">{Object.entries(JSON.parse(profile.data)).filter(([,value]) => value && typeof value !== 'object').map(([key,value]) => <div><dt>{key}</dt><dd>{String(value)}</dd></div>)}</dl></details>)}
   </div>}
   {!customerEmail && <form method="get" class="inline-form">
     <label>Search <input name="q" value={q} placeholder={section === 'orders' ? 'Email or order reference' : 'Name or email'} /></label>
@@ -135,15 +132,15 @@ const actions = order ? [
   {section === 'orders' || customerEmail ? <div class="table-wrap"><table>
     <thead><tr><th>Order</th><th>Customer</th><th>Order status</th><th>Payment</th><th>Total</th></tr></thead>
     <tbody>{(customerEmail ? customerOrders : list).slice(0, 25).map((row) => <tr>
-      <td><a href={'/admin/orders?order=' + row.id}>#{row.id.slice(0, 8).toUpperCase()}</a><br /><small>{displayDate(row.created_at)}</small></td>
+      <td><a href={orderHref(row,true)}>{orderReference(row)}</a><br /><small>{displayDate(row.created_at)}</small></td>
       <td>{row.name}<br /><small>{row.email}</small></td><td><span class="pill">{row.status}</span></td>
-      <td>{row.payment_method.toUpperCase()} · {row.payment_status}</td><td>{money(row.total, true)}</td>
+      <td>{row.payment_method.toUpperCase()} · {row.payment_status}</td><td>{row.currency === 'EGP' ? money(row.total,true) : (row.total/100).toFixed(2) + ' ' + row.currency}</td>
     </tr>)}</tbody>
   </table></div> : <div class="table-wrap"><table>
-    <thead><tr><th>Customer</th><th>Email</th><th>Store orders</th><th>Shopify orders</th></tr></thead>
+    <thead><tr><th>Customer</th><th>Email</th><th>Orders</th></tr></thead>
     <tbody>{list.slice(0, 25).map((row) => <tr>
-      <td><a href={'/admin/customers?customer=' + encodeURIComponent(row.email)}>{row.name || row.email}</a></td>
-      <td>{row.email}</td><td>{row.orders}</td><td>{row.archived}</td>
+      <td><a href={'/admin/customers?customer=' + encodeURIComponent(row.identity)}>{row.name || row.email || 'Customer without email'}</a></td>
+      <td>{row.email ?? 'Not provided'}</td><td>{row.orders}</td>
     </tr>)}</tbody>
   </table></div>}
   {!(customerEmail ? customerOrders : list).length && <p class="muted">No records found.</p>}

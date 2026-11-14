@@ -11,7 +11,7 @@ export const adminSections = [
   ['products', 'Products'], ['collections', 'Collections'], ['orders', 'Orders'], ['customers', 'Customers'],
   ['discounts', 'Discounts'], ['shipping', 'Shipping'], ['content', 'Content'],
   ['media', 'Media'], ['inbox', 'Inbox'], ['settings', 'Settings'],
-  ['returns', 'Returns & exchanges'], ['migration', 'Shopify migration'],
+  ['returns', 'Returns & exchanges'], ['migration', 'Data import'],
 ];
 
 export function queryOffset(url) {
