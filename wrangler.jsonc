@@ -19,6 +19,7 @@
       "migrations_dir": "migrations"
     }
   ],
+  "ai": { "binding": "AI" },
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "unlisted-store-media" }],
   "durable_objects": { "bindings": [{ "name": "OWNER_PASSWORD_HASHER", "class_name": "OwnerPasswordHasher" }] },
   "migrations": [{ "tag": "owner-password-v1", "new_sqlite_classes": ["OwnerPasswordHasher"] }],
