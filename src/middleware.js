@@ -10,6 +10,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
   if (request.method === 'GET' && storefrontPaths.test(url.pathname)) {
     try {
       context.locals.visitor = await recordVisitor(context, env);
+      const campaign=url.searchParams.get('utm_id')||url.searchParams.get('campaign_id');
+      if(context.locals.visitor&&/^\d{1,30}$/.test(campaign||'')) context.cookies.set('unlisted_campaign',campaign,{path:'/',maxAge:7*86400,httpOnly:true,sameSite:'lax',secure:url.protocol==='https:'});
     } catch {
       // Storefront requests can continue when the analytics write is unavailable.
     }
@@ -20,7 +22,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   // Preserve Origin on form submissions while keeping paths and query strings out of Referer.
   headers.set('Referrer-Policy', 'strict-origin');
   headers.set('X-Frame-Options', 'DENY');
-  headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  headers.set('Permissions-Policy', `camera=(), microphone=${url.pathname === '/admin/finance' ? '(self)' : '()'}, geolocation=()`);
   if (headers.get('Content-Type')?.includes('text/html')) {
     headers.set('Content-Security-Policy',
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' https://accept.paymob.com https://eg.checkout.paymob.com; object-src 'none'");
