@@ -1,4 +1,4 @@
-import { statements, unixNow } from './db.js';
+import { all, statements, unixNow } from './db.js';
 import { StoreError } from './http.js';
 
 const gateway = 'https://accept.paymob.com';
@@ -13,11 +13,22 @@ function integrationSetting(env) {
     ? 'PAYMOB_TEST_INTEGRATION_IDS' : 'PAYMOB_INTEGRATION_IDS';
 }
 
-export function paymentIntegrationIds(env) {
-  const setting = env[integrationSetting(env)];
+function integrationIds(value) {
+  const setting = value;
   if (typeof setting !== 'string' || !/^\s*\d+\s*(,\s*\d+\s*)*$/.test(setting)) return [];
   const ids = setting.split(',').map(Number);
   return ids.length && ids.every((id) => Number.isSafeInteger(id) && id > 0) ? ids : [];
+}
+
+export function paymentIntegrationIds(env, method = 'all') {
+  const card = integrationIds(env[integrationSetting(env)]);
+  const wallet = integrationIds(env[testCredentials(env) ? 'PAYMOB_TEST_WALLET_INTEGRATION_IDS' : 'PAYMOB_WALLET_INTEGRATION_IDS']);
+  return method === 'card' ? card : method === 'wallet' ? wallet : [...new Set([...card,...wallet])];
+}
+
+export function walletReady(env) {
+  return ['PAYMOB_SECRET_KEY','PAYMOB_PUBLIC_KEY','PAYMOB_HMAC_SECRET'].every((key) => typeof env[key] === 'string' && env[key].trim()) &&
+    Boolean(paymentOrigin(env)) && paymentIntegrationIds(env,'wallet').length > 0;
 }
 
 export function paymentOrigin(env) {
@@ -32,7 +43,7 @@ export function paymentOrigin(env) {
 export function paymentConfigurationIssues(env) {
   const required = ['PAYMOB_SECRET_KEY', 'PAYMOB_PUBLIC_KEY', 'PAYMOB_HMAC_SECRET'];
   const issues = required.filter((name) => typeof env[name] !== 'string' || !env[name].trim());
-  if (!paymentIntegrationIds(env).length) issues.push(integrationSetting(env));
+  if (!paymentIntegrationIds(env, 'card').length) issues.push(integrationSetting(env));
   if (!paymentOrigin(env)) issues.push('PAYMENT_ORIGIN');
   return issues;
 }
@@ -41,7 +52,7 @@ export function cardReady(env) {
   return paymentConfigurationIssues(env).length === 0;
 }
 
-async function createPaymobIntention(env, order, remaining, callbacks = {}) {
+export async function createPaymobIntention(env, order, remaining, callbacks = {}, method = 'card', lines = []) {
   const [first, ...last] = order.name.trim().split(/\s+/);
   const response = await fetch(gateway + '/v1/intention/', {
     method: 'POST',
@@ -50,8 +61,8 @@ async function createPaymobIntention(env, order, remaining, callbacks = {}) {
     body: JSON.stringify({
       amount: order.total,
       currency: order.currency,
-      payment_methods: paymentIntegrationIds(env),
-      items: [{ name: 'UNLISTED™ order ' + order.id.slice(0, 8), amount: order.total, description: 'Clothing order', quantity: 1 }],
+      payment_methods: paymentIntegrationIds(env, method),
+      items: lines.length ? paymentSummaryItems(order, lines) : [{ name: 'UNLISTED™ order ' + order.id.slice(0, 8), amount: order.total, description: 'Clothing order', quantity: 1 }],
       billing_data: {
         first_name: first, last_name: last.join(' ') || first, street: order.address, building: 'NA',
         floor: 'NA', apartment: 'NA', phone_number: order.phone, email: order.email,
@@ -69,6 +80,26 @@ async function createPaymobIntention(env, order, remaining, callbacks = {}) {
     throw new Error('Intention response incomplete');
   }
   return result;
+}
+
+// Allocate discounts across unit prices, including remainder cents, so the hosted
+// summary adds up to exactly the amount verified by our callback.
+export function paymentSummaryItems(order, lines) {
+  const items = [];
+  let allocated = 0;
+  const units = lines.flatMap((line) => Array.from({length:line.quantity}, () => line));
+  let gross = 0;
+  for (const line of units) {
+    gross += line.price;
+    const cumulative = order.subtotal ? Math.floor(gross * order.discount / order.subtotal) : 0;
+    const discount = cumulative - allocated;
+    allocated = cumulative;
+    items.push({name:line.product_title.slice(0,100),amount:line.price-discount,
+      description:line.variant_title.slice(0,100),quantity:1});
+  }
+  if (order.shipping) items.push({name:'Delivery',amount:order.shipping,description:order.shipping_label,quantity:1});
+  if (items.reduce((sum,item) => sum+item.amount*item.quantity,0) !== order.total) throw new Error('Payment summary total mismatch');
+  return items;
 }
 
 function hostedCheckout(env, intention) {
@@ -99,7 +130,9 @@ export async function createSandboxCheckout(env, id, returnPath = '/admin/paymob
 
 export async function startPayment(env, order) {
   const remaining = order.expires_at - unixNow();
-  if (!cardReady(env) || order.payment_method !== 'card' || order.payment_status !== 'pending' || remaining < 60) {
+  const choice = await env.DB.prepare('SELECT method FROM order_payment_choices WHERE order_id=?').bind(order.id).first('method');
+  const method = choice === 'wallet' ? 'wallet' : 'card';
+  if (!(method === 'wallet' ? walletReady(env) : cardReady(env)) || order.payment_method !== 'card' || order.payment_status !== 'pending' || remaining < 60) {
     throw new StoreError('Card payment is unavailable for this order.');
   }
   if (order.checkout_url) return order.checkout_url;
@@ -112,7 +145,8 @@ export async function startPayment(env, order) {
     throw new StoreError('Payment is being prepared. Try again shortly.', 409);
   }
   try {
-    const result = await createPaymobIntention(env, order, remaining);
+    const lines = await all(env.DB.prepare('SELECT * FROM order_items WHERE order_id=? ORDER BY product_title,variant_title').bind(order.id));
+    const result = await createPaymobIntention(env, order, remaining, {}, method, lines);
     const checkout = hostedCheckout(env, result);
     const saved = await env.DB.prepare(`UPDATE orders SET checkout_url = ?, provider_order_id = ?, payment_lock_until = NULL
       WHERE id = ? AND payment_lock_until = ? AND payment_status = 'pending' AND status = 'new'`)
@@ -163,6 +197,8 @@ export async function recordCapture(env, transaction) {
   const order = await env.DB.prepare('SELECT * FROM orders WHERE provider_order_id = ? AND payment_method = ?')
     .bind(providerId, 'card').first();
   if (!order) throw new StoreError('Payment has no matching order.', 409);
+  const choice = await env.DB.prepare('SELECT method FROM order_payment_choices WHERE order_id=?').bind(order.id).first('method');
+  if (!paymentIntegrationIds(env, choice === 'wallet' ? 'wallet' : 'card').includes(Number(transaction.integration_id))) throw new StoreError('Payment method does not match the order.',409);
   if (order.total !== Number(transaction.amount_cents) || order.currency !== transaction.currency) {
     throw new StoreError('Payment does not match the order total.', 409);
   }
