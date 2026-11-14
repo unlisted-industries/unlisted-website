@@ -234,7 +234,7 @@ test('Paymob starts hosted checkout and only a matching signed capture can mark 
   assert.equal((await callback(transaction)).status, 204);
   assert.equal((await callback(transaction)).status, 204);
   assert.equal(await db.prepare("SELECT payment_status FROM orders WHERE provider_order_id='8001'").first('payment_status'), 'paid');
-  assert.match(await (await admin('/admin/finance')).text(), /<strong>680 EGP<\/strong>/);
+  assert.match(await (await admin('/admin/finance')).text(), /Collected net sales<\/span><strong>LE 680\.00<\/strong>/);
   assert.equal(await db.prepare('SELECT count(*) AS total FROM payment_events').first('total'), 1);
   assert.equal(mail.filter((message) => message.to[0] === 'cardbuyer@example.invalid').length, 1);
 
@@ -670,4 +670,74 @@ test('period comparisons use matching order and visit windows and exclude the en
   assert.match(html, /1,360 EGP/);
   assert.match(html, /30 Oct – 31 Oct 2026/);
   assert.match(html, /100\.0%/);
+});
+
+test('finance journals are private, balanced, confirmed, idempotent and separate cash from profit', async()=>{
+ const web=browser();await web('/admin/session',{action:'password',password:ownerPassword});
+ const day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Cairo'}).format(new Date());
+ const form={op:'transaction',request_id:'a'.repeat(32),confirmed:'yes',kind:'owner_draw',account:'cash',category:'other',occurred_on:day,amount:'123.45',note:'Finance integration owner withdrawal'};
+ assert.equal((await browser()('/admin/finance-action',form)).status,401);
+ assert.match((await web('/admin/finance-action',{...form,confirmed:''})).headers.get('Location'),/Review/);
+ assert.equal((await web('/admin/finance-action',form,{Origin:'https://wrong.invalid'})).status,403);
+ assert.match((await web('/admin/finance-action',form)).headers.get('Location'),/saved=1/);
+ assert.match((await web('/admin/finance-action',form)).headers.get('Location'),/saved=1/);
+ assert.equal(await db.prepare("SELECT count(*) FROM finance_journals WHERE id=?").bind(form.request_id).first('count(*)'),1);
+ const saved=await db.prepare('SELECT * FROM finance_journals WHERE id=?').bind(form.request_id).first();
+ assert.deepEqual(JSON.parse(saved.postings),[{account:'cash',amount:-12345},{account:'drawings',amount:12345}]);
+ assert.equal(JSON.parse(saved.postings).some(p=>p.account==='expense'),false);
+ await assert.rejects(db.prepare("UPDATE finance_journals SET note='changed' WHERE id=?").bind(form.request_id).run(),/Reverse a journal/);
+ await assert.rejects(db.prepare("INSERT INTO finance_journals(id,source,occurred_on,kind,actor,postings) VALUES('bad','bad',?,'expense','test',?)").bind(day,JSON.stringify([{account:'cash',amount:-100},{account:'expense',amount:99}])).run(),/balanced/);
+ for(const tab of ['overview','accountant','cash','drops','inventory','marketing','planning','settings'])assert.equal((await web('/admin/finance?tab='+tab)).status,200,tab);
+ const exported=await web('/admin/finance-export.csv');assert.equal(exported.status,200);assert.match(await exported.text(),/UNLISTED Financial Report/);
+ assert.equal((await browser()('/admin/finance-export.csv')).status,401);
+});
+
+test('finance batch receipts and PR gifts change stock once and preserve liability and cost history',async()=>{
+ const web=browser();await web('/admin/session',{action:'password',password:ownerPassword});
+ const day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Cairo'}).format(new Date());
+ await db.batch([db.prepare("INSERT INTO products(id,handle,title,status) VALUES('finance-p','finance-product','Finance fixture','active')"),db.prepare("INSERT INTO variants(id,product_id,title,price,inventory) VALUES('finance-v','finance-p','M',100000,10)")]);
+ let sequence=100;const post=async(op,fields={})=>{const response=await web('/admin/finance-action',{op,request_id:(sequence++).toString(16).padStart(32,'0'),confirmed:'yes',...fields});assert.match(response.headers.get('Location'),/saved=1/,response.headers.get('Location'));return response;};
+ await post('unit_cost',{variant_id:'finance-v',unit_cost:'400'});
+ await post('drop',{name:'Finance integration drop',fixed_cost:'1000'});
+ const drop=await db.prepare("SELECT id FROM finance_drops WHERE name='Finance integration drop'").first('id');
+ await post('assign_drop',{product_id:'finance-p',drop_id:drop});
+ await post('batch',{name:'Manufacturing test batch',drop_id:drop,variant_id:'finance-v',quantity:'10',raw_materials:'3000',manufacturing:'2000',packaging:'0',freight:'0',overhead:'0'});
+ const batch=await db.prepare("SELECT id FROM finance_batches WHERE name='Manufacturing test batch'").first('id');
+ const receive={op:'receive_batch',confirmed:'yes',batch_id:batch,occurred_on:day};
+ const outcomes=await Promise.all([web('/admin/finance-action',{...receive,request_id:'b'.repeat(32)}),web('/admin/finance-action',{...receive,request_id:'c'.repeat(32)})]);
+ assert.equal(outcomes.filter(r=>r.headers.get('Location').includes('saved=1')).length,1);
+ assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id='finance-v'").first('inventory'),20);
+ assert.equal(await db.prepare("SELECT unit_cost FROM finance_variant_costs WHERE variant_id='finance-v'").first('unit_cost'),45000);
+ assert.equal(await db.prepare("SELECT count(*) n FROM finance_journals WHERE source=?").bind('batch:'+batch).first('n'),1);
+ await post('transaction',{kind:'supplier_payment',account:'bank',category:'manufacturing',amount:'5000',occurred_on:day,note:'Settle batch'});
+ const excessive=await web('/admin/finance-action',{op:'transaction',confirmed:'yes',request_id:'d'.repeat(32),kind:'supplier_payment',account:'bank',category:'manufacturing',amount:'1',occurred_on:day,note:'Overpayment'});
+ assert.match(excessive.headers.get('Location'),/exceeds/);
+ const gift={op:'gift',request_id:'e'.repeat(32),confirmed:'yes',variant_id:'finance-v',quantity:'2',gifted_on:day,recipient:'Fixture influencer',influencer_fee:'100',shipping:'50',account:'bank',note:'PR fixture'};
+ assert.match((await web('/admin/finance-action',gift)).headers.get('Location'),/saved=1/);
+ await web('/admin/finance-action',gift);
+ assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id='finance-v'").first('inventory'),18);
+ const tooMany=await web('/admin/finance-action',{...gift,request_id:'f'.repeat(32),quantity:'99'});
+ assert.match(tooMany.headers.get('Location'),/sufficient/);
+ assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id='finance-v'").first('inventory'),18);
+ assert.equal(await db.prepare("SELECT count(*) n FROM finance_pr_gifts WHERE recipient='Fixture influencer'").first('n'),1);
+});
+
+test('statement import waits for confirmation, blocks duplicates and keeps original files private',async()=>{
+ const web=browser();await web('/admin/session',{action:'password',password:ownerPassword});
+ const day=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Cairo'}).format(new Date());
+ const csv='date,amount,kind,category,account,note\n'+day+',200.01,expense,packaging,bank,Unique statement fixture';
+ const form=new FormData();form.set('op','extract');form.set('file',new File([csv],'statement.csv',{type:'text/csv'}));
+ const result=await web('/admin/finance-action',form);assert.match(result.headers.get('Location'),/import=/);
+ const id=new URL(result.headers.get('Location'),origin).searchParams.get('import');
+ assert.equal(await db.prepare("SELECT count(*) n FROM finance_journals WHERE source=?").bind('import:'+id+':0').first('n'),0);
+ const imported=await db.prepare('SELECT * FROM finance_imports WHERE id=?').bind(id).first();
+ assert.equal((await browser()('/media/'+imported.media_key)).status,404);
+ assert.equal((await browser()('/admin/finance-file?id='+id)).status,401);
+ assert.equal(await (await web('/admin/finance-file?id='+id)).text(),csv);
+ const confirm={op:'confirm_import',import_id:id,confirmed:'yes',include_0:'on',date_0:day,amount_0:'200.01',kind_0:'expense',category_0:'packaging',account_0:'bank',note_0:'Unique statement fixture'};
+ assert.match((await web('/admin/finance-action',confirm)).headers.get('Location'),/saved=1/);
+ await web('/admin/finance-action',confirm);
+ assert.equal(await db.prepare("SELECT count(*) n FROM finance_journals WHERE source=?").bind('import:'+id+':0').first('n'),1);
+ const repeated=await web('/admin/finance-action',form);assert.equal(new URL(repeated.headers.get('Location'),origin).searchParams.get('import'),id);
+ assert.equal(await db.prepare('SELECT state FROM finance_imports WHERE id=?').bind(id).first('state'),'confirmed');
 });
