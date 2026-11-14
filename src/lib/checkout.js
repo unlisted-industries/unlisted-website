@@ -85,7 +85,8 @@ export async function placeOrder(db, { id, key, input, expected, user, visitor }
     throw new StoreError('The cart or total changed. Review your order again.', 409);
   }
   const orderId = makeToken(16);
-  const card = input.method === 'card';
+  if (!['cod','card','wallet'].includes(input.method)) throw new StoreError('Select an available payment method.');
+  const card = input.method !== 'cod';
   if (card && totals.total === 0) throw new StoreError('Choose cash on delivery for a zero-total order.');
   try {
     await statements(db, [
@@ -96,10 +97,13 @@ export async function placeOrder(db, { id, key, input, expected, user, visitor }
       orderId, key, requestDigest, id, totals.version, user?.email === input.email ? user.id : null,
       visitor?.id ?? null, visitor?.day ?? null, input.email, input.name, input.phone, input.address,
       input.city, totals.rate.code, totals.rate.label, totals.subtotal, totals.rate.amount, totals.discount,
-      input.coupon || null, totals.total, input.method, card ? 'pending' : 'unpaid', card ? unixNow() + holdSeconds : null],
+      input.coupon || null, totals.total, card ? 'card' : 'cod', card ? 'pending' : 'unpaid', card ? unixNow() + holdSeconds : null],
       ...totals.items.map((item) => [`INSERT INTO order_items
         (order_id, variant_id, product_title, variant_title, sku, quantity, price) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       orderId, item.id, item.title, item.variant_title, item.sku, item.quantity, item.price]),
+      ['INSERT INTO order_payment_choices (order_id, method) VALUES (?, ?)', orderId, input.method],
+      ['INSERT INTO order_notifications (order_id) VALUES (?)', orderId],
+      ['DELETE FROM checkout_drafts WHERE cart_id = ?', id],
       ['DELETE FROM cart_items WHERE cart_id = ?', id],
       ['UPDATE carts SET version = version + 1, updated_at = unixepoch() WHERE id = ?', id],
     ]);
