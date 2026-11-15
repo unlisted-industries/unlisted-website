@@ -31,6 +31,7 @@ const rates = user ? await shippingRates(env.DB) : [];
           <button class="btn" type="submit">SAVE MY INFORMATION</button>
         </form>
       </details>
+      <p><a class="btn" href="/returns">RETURNS, EXCHANGES & STORE CREDIT</a></p>
       <h2>Orders</h2>
       {orders.length ? <ul class="account-orders">{orders.slice(0,25).map(order => <li>
         <a href={orderHref(order)}>Order {orderReference(order)}</a> · {displayDate(order.created_at)} · {order.currency === 'EGP' ? money(order.total,true) : (order.total/100).toFixed(2) + ' ' + order.currency} · {order.status} · {order.payment_status}
