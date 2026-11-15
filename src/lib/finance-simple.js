@@ -12,7 +12,7 @@ export async function ensureSimpleFinance(db){
 // All amounts are EGP cents. Full-batch recovery includes production once, even for gifted units.
 export function stockMetrics(p){
  const q=p.quantity,available=q-p.pr_units,net=p.price-p.fees;
- const unitCost=p.total_cost/q,margin=net-unitCost,fixed=p.total_cost+p.ads+p.pr_cost;
+ const unitCost=p.total_cost/q,margin=available>0?net-(p.total_cost+p.pr_cost)/available:0,fixed=p.total_cost+p.ads+p.pr_cost;
  const profit=available*net-fixed;
  const breakEvenUnits=net>0?Math.ceil(fixed/net):null;
  return {unitCost,available,profit,margin,maxCPA:margin>0?Math.floor(margin):null,
