@@ -11,11 +11,13 @@ const origin = 'https://unlisted.test';
 const secret = 'local-test-hmac';
 const owner = 'owner@example.invalid';
 const ownerPassword = 'fixture-owner-password-one';
-const runtimeSchemas = new Set(['0006_owner_passwords.sql', '0007_order_returns.sql', '0008_shopify_import.sql', '0009_paymob_sandbox.sql', '0010_live_visitors.sql', '0013_independent_workspace.sql']);
+const runtimeSchemas = new Set(['0014_returns_workspace.sql','0006_owner_passwords.sql', '0007_order_returns.sql', '0008_shopify_import.sql', '0009_paymob_sandbox.sql', '0010_live_visitors.sql', '0013_independent_workspace.sql']);
 const mail = [];
 const intents = [];
 const telegram = [];
 let failTelegram = false;
+const providerRefunds=[],providerBookings=[];
+let refundTimeout=false;
 let runtime, db, admin;
 
 function browser() {
@@ -60,9 +62,17 @@ before(async () => {
       TELEGRAM_BOT_TOKEN:'123456:fixture', TELEGRAM_CHAT_ID:'123', PAYMOB_TEST_WALLET_INTEGRATION_IDS:'202',
       PAYMOB_INTEGRATION_IDS: '999', PAYMOB_TEST_INTEGRATION_IDS: '101', PAYMOB_HMAC_SECRET: secret,
       PAYMENT_ORIGIN: origin, PREVIEW_PAYMENT_ORIGIN: origin,
+      PAYMOB_RMA_REFUNDS_ENABLED:'true', RMA_SHIPPING_ENABLED:'true', BOSTA_API_KEY:'fixture-bosta', BOSTA_BUSINESS_LOCATION_ID:'fixture-location',
     },
     async outboundService(request) {
       const url = new URL(request.url);
+      if(url.href==='https://accept.paymob.com/api/acceptance/void_refund/refund') {
+        const data=await request.json();providerRefunds.push(data);if(refundTimeout)throw new Error('Fixture timeout');
+        return Response.json({id:900000+providerRefunds.length,success:true,pending:false,amount_cents:data.amount_cents});
+      }
+      if(url.href==='https://app.bosta.co/api/v2/deliveries?apiVersion=1') {
+        providerBookings.push(await request.json());return Response.json({success:true,data:{_id:'fixture-booking-'+providerBookings.length,trackingNumber:'fixture-track-'+providerBookings.length,state:{value:'Pickup requested'}}});
+      }
       if (url.href === 'https://api.resend.com/emails') {
         mail.push(await request.json());
         return Response.json({ id: 'test-email-' + mail.length });
@@ -381,13 +391,13 @@ test('delivered orders support private returns, safe exchange stock, and verifie
   assert.match((await buyer('/api/return-request', first)).headers.get('Location'), /error=/);
   await db.prepare('UPDATE order_deliveries SET delivered_at = unixepoch() WHERE order_id = ?').bind(order).run();
   const orderPage = await (await buyer('/orders/' + order)).text();
-  assert.match(orderPage, /Size exchange/);
-  assert.match(orderPage, /v-exchange/);
+  assert.match(orderPage, /START OR TRACK A RETURN/);
+  assert.match(orderPage, /\/returns\?order=website:/);
   assert.match((await buyer('/api/return-request', first)).headers.get('Location'), /return-sent=1/);
   assert.match((await buyer('/api/return-request', first)).headers.get('Location'), /return-sent=1/);
   const second = { ...item, request_id: '2'.repeat(32) };
   assert.match((await buyer('/api/return-request', second)).headers.get('Location'), /error=/);
-  assert.match(await (await admin('/admin/returns')).text(), /Awaiting review/);
+  assert.match(await (await admin('/admin/returns?legacy=1')).text(), /Awaiting review/);
   const instructions = { message: 'Return the item to the store.' };
   assert.match((await returnAction(first.request_id, 'approve', instructions)).headers.get('Location'), /saved=1/);
   assert.equal(await stock('v-exchange'), 0);
@@ -836,4 +846,117 @@ test('wallet uses its separate Paymob integration and rejects a signed capture f
   assert.equal((await send({...transaction,integration_id:202})).status,204);
   assert.equal(await db.prepare('SELECT payment_status FROM orders WHERE id=?').bind(order.id).first('payment_status'),'paid');
   assert.equal((await send({...transaction,integration_id:202})).status,204);
+});
+
+async function rmaSeed(email,quantity=1) {
+ await db.prepare('DELETE FROM rate_limits').run();
+ admin=browser();await admin('/admin/session',{action:'password',password:ownerPassword});
+ const web=browser();await web('/account/session',{action:'request',email});
+ const token=/token=([a-f0-9]{64})/.exec(mail.at(-1).text)[1];await web('/account/session',{action:'confirm',token});
+ await db.prepare("UPDATE variants SET inventory=50,price=60000 WHERE id='v'").run();
+ const input=await customerCheckout(web,email,'cod','',quantity),placed=await web('/api/checkout',input);
+ const id=placed.headers.get('Location').split('/').at(-1);
+ for(const operation of ['confirm','ship','collect','deliver'])assert.match((await admin('/admin/action',{area:'orders',op:'order',id,operation,tracking:'LOCAL-TEST'})).headers.get('Location'),/saved=1/);
+ return {web,id};
+}
+async function rmaReview(web,id,kind='refund',quantity=1,extra={}) {
+ const fields={order:'website:'+id,kind,reason:'size','select:v':'on','quantity:v':String(quantity),reason_note:'Test evidence',...extra};
+ const response=await web('/returns',fields),html=await response.text();
+ assert.equal(response.status,200);assert.match(html,/Review your request/);
+ const field=name=>new RegExp('name="'+name+'" value="([^"]*)"').exec(html)?.[1];
+ assert.ok(field('quote'),html.slice(-1000));
+ return {...fields,request_id:field('request_id'),quote:field('quote'),accept_quote:'on',language:'en'};
+}
+async function rmaAction(id,operation,extra={}) {
+ const version=await db.prepare('SELECT version FROM rma_cases WHERE id=?').bind(id).first('version');
+ return admin('/admin/returns-action',{id,operation,version:String(version),...extra});
+}
+test('RMA portal verifies ownership, quotes exact amounts, stores private photos and deduplicates submissions',async()=>{
+ const {web,id}=await rmaSeed('rma-one@example.invalid',2);
+ assert.equal((await browser()('/admin/returns')).headers.get('Location'),'/admin/login');
+ const arabic=await web('/returns?lang=ar&order=website:'+id);assert.match(await arabic.text(),/الاستبدال والاسترجاع/);assert.match(arabic.headers.get('Cache-Control'),/no-store/);
+ const review=await rmaReview(web,id);
+ const denied=await browser()('/api/returns',review);assert.match(denied.headers.get('Location'),/error=/);
+ const multipart=new FormData();for(const [k,v] of Object.entries(review))multipart.set(k,v);
+ multipart.set('photos',new Blob([new Uint8Array([137,80,78,71,13,10,26,10])],{type:'image/png'}),'proof.png');
+ const sent=await web('/api/returns',multipart);assert.match(sent.headers.get('Location'),/sent=1/);
+ assert.match((await web('/api/returns',multipart)).headers.get('Location'),/sent=1/);
+ const c=await db.prepare('SELECT * FROM rma_cases WHERE id=?').bind(review.request_id).first();assert.equal(c.state,'approved');assert.equal(c.item_value,60000);assert.equal(c.settlement,-60000);assert.equal(c.fee,0);
+ const photo=await db.prepare('SELECT * FROM rma_photos WHERE case_id=?').bind(c.id).first();assert.equal((await browser()('/admin/returns-photo?id='+photo.id)).status,401);assert.equal((await browser()('/media/'+photo.media_key)).status,404);assert.equal((await admin('/admin/returns-photo?id='+photo.id)).status,200);
+ assert.match(await (await browser()('/returns?request='+c.id)).text(),/Find your orders securely/);
+ assert.equal((await admin('/admin/returns-action',{id:c.id,version:1,operation:'receive'},{Origin:'https://other.invalid'})).status,403);
+ assert.equal(await db.prepare('SELECT state FROM rma_cases WHERE id=?').bind(c.id).first('state'),'approved');
+ assert.match((await rmaAction(c.id,'receive',{'restock:v':'on'})).headers.get('Location'),/saved=1/);
+ assert.match((await rmaAction(c.id,'complete',{reference:'LOCAL-REFUND-A',settlement_verified:'on'})).headers.get('Location'),/saved=1/);
+ assert.match((await rmaAction(c.id,'complete',{reference:'LOCAL-REFUND-A',settlement_verified:'on'})).headers.get('Location'),/error=/);
+ assert.equal(await db.prepare('SELECT count(*) n FROM rma_ledger WHERE case_id=?').bind(c.id).first('n'),1);
+ assert.ok(await db.prepare('SELECT count(*) n FROM rma_mail WHERE sent_at IS NOT NULL').first('n'));
+ assert.equal((await admin('/admin/finance')).status,200);
+});
+test('RMA reservations survive concurrent submissions without overselling or double restock',async()=>{
+ await db.prepare("UPDATE variants SET inventory=1,price=60000 WHERE id='v-exchange'").run();
+ const a=await rmaSeed('rma-race-a@example.invalid'),b=await rmaSeed('rma-race-b@example.invalid');
+ const ra=await rmaReview(a.web,a.id,'exchange',1,{'replacement:v':'v-exchange'}),rb=await rmaReview(b.web,b.id,'exchange',1,{'replacement:v':'v-exchange'});
+ await Promise.all([a.web('/api/returns',ra),b.web('/api/returns',rb)]);
+ assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id='v-exchange'").first('inventory'),0);
+ const cases=(await db.prepare('SELECT * FROM rma_cases WHERE id IN(?,?)').bind(ra.request_id,rb.request_id).all()).results;
+ assert.equal(cases.filter(c=>c.state==='approved').length,1);
+ const approved=cases.find(c=>c.state==='approved');
+ assert.match((await rmaAction(approved.id,'receive',{'restock:v':'on'})).headers.get('Location'),/saved=1/);
+ const stock=await db.prepare("SELECT inventory FROM variants WHERE id='v'").first('inventory');
+ assert.match((await rmaAction(approved.id,'receive',{'restock:v':'on'})).headers.get('Location'),/error=/);
+ assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id='v'").first('inventory'),stock);
+ const tracking=await rmaAction(approved.id,'tracking',{provider:'manual',direction:'replacement',reference:'LOCAL-X-TRACK',status:'Shipped',cost:'25',message:'Fixture courier booking'});assert.match(tracking.headers.get('Location'),/saved=1/);
+ assert.match((await rmaAction(approved.id,'complete',{reference:'LOCAL-X-TRACK'})).headers.get('Location'),/saved=1/);
+});
+test('optional store credit is issued once, belongs to verified customer and retains unused balance',async()=>{
+ const {web,id}=await rmaSeed('rma-credit@example.invalid');const review=await rmaReview(web,id,'credit');
+ assert.match((await web('/api/returns',review)).headers.get('Location'),/sent=1/);
+ assert.match((await rmaAction(review.request_id,'receive')).headers.get('Location'),/saved=1/);
+ assert.match((await rmaAction(review.request_id,'complete')).headers.get('Location'),/saved=1/);
+ const credit=await db.prepare('SELECT * FROM rma_credit WHERE case_id=?').bind(review.request_id).first();assert.equal(credit.balance,68000);
+ await web('/api/cart',{variant:'v',quantity:1,action:'add'});
+ const fields={name:'Buyer',email:'rma-credit@example.invalid',phone:'01000000000',address:'Test address',city:'Cairo',governorate:'cairo',discount:credit.code,payment_method:'cod'};
+ const html=await (await web('/checkout',fields)).text(),f=name=>new RegExp('name="'+name+'" value="([^"]*)"').exec(html)?.[1];
+ assert.equal(f('quoted_total'),'8000');
+ const placed=await web('/api/checkout',{...fields,cart_version:f('cart_version'),checkout_key:f('checkout_key'),quoted_total:f('quoted_total')});assert.match(placed.headers.get('Location'),/^\/orders\//);
+ assert.equal(await db.prepare('SELECT balance FROM rma_credit WHERE code=?').bind(credit.code).first('balance'),8000);
+ const orderId=placed.headers.get('Location').split('/').at(-1);
+ assert.match((await admin('/admin/action',{op:'order',area:'orders',id:orderId,operation:'cancel'})).headers.get('Location'),/saved=1/);
+ assert.equal(await db.prepare('SELECT balance FROM rma_credit WHERE code=?').bind(credit.code).first('balance'),68000);
+});
+test('courier booking and Paymob refunds claim each external action once and hold uncertain results',async()=>{
+ const {web,id}=await rmaSeed('rma-provider@example.invalid');const review=await rmaReview(web,id);
+ await web('/api/returns',review);
+ const booked=await rmaAction(review.request_id,'booking',{provider:'bosta',direction:'return'});assert.match(booked.headers.get('Location'),/saved=1/);
+ assert.equal(providerBookings.at(-1).type,25);assert.equal(providerBookings.at(-1).cod,0);const bookings=providerBookings.length;
+ await rmaAction(review.request_id,'booking',{provider:'bosta',direction:'return'});assert.equal(providerBookings.length,bookings);
+ await rmaAction(review.request_id,'receive');
+ // Isolated captured-payment fixture; no real gateway transaction is touched.
+ await db.prepare("INSERT INTO payment_events(provider_txn,order_id,state) VALUES('555999',?,'captured')").bind(id).run();
+ refundTimeout=true;const result=await rmaAction(review.request_id,'paymob');assert.match(result.headers.get('Location'),/error=/);refundTimeout=false;
+ const count=providerRefunds.length;await rmaAction(review.request_id,'paymob');assert.equal(providerRefunds.length,count);
+ assert.equal(await db.prepare("SELECT state FROM rma_operations WHERE case_id=? AND kind='refund'").bind(review.request_id).first('state'),'review');
+ assert.match((await rmaAction(review.request_id,'complete',{reference:'UNVERIFIED',settlement_verified:'on'})).headers.get('Location'),/error=/);
+});
+
+test('historical evidence updates require owner evidence and customer consent before approval',async()=>{
+ const {web}=await rmaSeed('rma-history@example.invalid');
+ const now=Math.floor(Date.now()/1000);
+ await db.prepare(`INSERT INTO shopify_orders(source_id,order_number,email,created_at,payment,fulfillment,amount,currency,line_items) VALUES('90001','#HISTORY-RMA','rma-history@example.invalid',?,'paid','fulfilled','680.00','EGP',?)`).bind(now-86400,JSON.stringify([{name:'Historical hoodie',sku:'UNKNOWN',quantity:1}])).run();
+ const fields={order:'shopify:90001',kind:'refund',reason:'defective','select:0':'on','quantity:0':'1',reason_note:'Defect'};
+ const html=await (await web('/returns',fields)).text(),f=n=>new RegExp('name="'+n+'" value="([^"]*)"').exec(html)?.[1];
+ const id=f('request_id');assert.ok(id);await web('/api/returns',{...fields,request_id:id,quote:f('quote'),accept_quote:'on',language:'en'});
+ assert.equal(await db.prepare('SELECT eligibility FROM rma_cases WHERE id=?').bind(id).first('eligibility'),'evidence_review');
+ assert.match((await rmaAction(id,'approve',{reviewed:'on',message:'Evidence incomplete'})).headers.get('Location'),/error=/);
+ const date=new Date().toISOString().slice(0,10);
+ assert.match((await rmaAction(id,'verify-evidence',{verified_total:'680',prior_refunded:'0',delivered_on:date,shipping_refund:'80','value:0':'600','variant:0':'v','cost:0':'200',payment_verified:'on',message:'Invoice and courier receipt verified'})).headers.get('Location'),/saved=1/);
+ assert.equal(await db.prepare('SELECT eligibility FROM rma_cases WHERE id=?').bind(id).first('eligibility'),'customer_review');
+ assert.match((await rmaAction(id,'approve',{reviewed:'on',message:'Customer has not agreed'})).headers.get('Location'),/error=/);
+ const version=await db.prepare('SELECT version FROM rma_cases WHERE id=?').bind(id).first('version');
+ assert.match((await web('/api/returns',{id,version:String(version),operation:'accept-evidence',accept_quote:'on',language:'en'})).headers.get('Location'),/sent=1/);
+ assert.match((await rmaAction(id,'approve',{message:'Pickup instructions'})).headers.get('Location'),/saved=1/);
+ assert.match((await rmaAction(id,'receive',{'restock:0':'on'})).headers.get('Location'),/saved=1/);
+ assert.match((await rmaAction(id,'complete',{reference:'HISTORY-REFUND',settlement_verified:'on'})).headers.get('Location'),/saved=1/);
+ assert.equal(await db.prepare('SELECT amount FROM rma_ledger WHERE case_id=?').bind(id).first('amount'),-68000);
 });

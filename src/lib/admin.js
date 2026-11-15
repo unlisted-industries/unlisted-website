@@ -3,6 +3,7 @@ import { discountCode, acceptedOrder } from './checkout.js';
 import { safeHtml, safeLink, parseCairoDateTime } from './content.js';
 import { checked, priceValue, quantityValue, slugValue, StoreError, textValue } from './http.js';
 import { cardReady } from './paymob.js';
+import { ensureRma } from './rma.js';
 import { ensureReturns, manageReturn } from './returns.js';
 import { importShopify } from './shopify-import.js';
 import { reportingRange } from './reporting.js';
@@ -138,6 +139,8 @@ function dateValue(value) {
 }
 
 async function discountAction(env, form) {
+  await ensureRma(env.DB);
+  if (await env.DB.prepare('SELECT 1 FROM rma_credit WHERE code=?').bind(String(form.get('code')||'').toUpperCase()).first()) throw new StoreError('Store credit is managed through Returns & exchanges.');
   const code = discountCode(textValue(form, 'code', 32));
   const kind = form.get('kind');
   if (kind !== 'fixed' && kind !== 'percent') throw new StoreError('Select a discount type.');
@@ -298,12 +301,12 @@ export const adminActions = {
 };
 
 export async function dashboard(db, period) {
-  await ensureReturns(db);
+  await ensureRma(db);
   const range = typeof period === 'object' ? period : reportingRange(new URL('https://unlisted.invalid/?days=' + (period ?? 30)));
   const queries = (window) => [
     [`SELECT count(*) AS sales, coalesce(sum(total), 0) AS gross,
       coalesce(sum(CASE WHEN payment_status = 'paid' THEN total - (SELECT coalesce(sum(refund_amount), 0)
-        FROM order_returns WHERE order_id = orders.id AND state = 'completed') ELSE 0 END), 0) AS revenue
+        FROM order_returns WHERE order_id = orders.id AND state = 'completed') + (SELECT coalesce(sum(l.amount),0) FROM rma_ledger l JOIN rma_cases r ON r.id=l.case_id WHERE r.source_key='website:'||orders.id AND l.kind IN('refund','exchange')) ELSE 0 END), 0) AS revenue
       FROM orders WHERE created_at >= ? AND created_at < ? AND ${acceptedOrder}`, window.start, window.end],
     ['SELECT count(DISTINCT visitor_id) AS visitors FROM visits WHERE day >= ? AND day < ?', window.startDate, window.untilDate],
     [`SELECT count(DISTINCT o.visitor_id) AS converted FROM orders o
@@ -321,7 +324,7 @@ export async function dashboard(db, period) {
       WHERE p.status = 'active' AND p.preorder = 0 AND v.active = 1 AND v.published_available = 1 AND v.inventory IS NULL`],
     ["SELECT count(*) AS count FROM payment_events WHERE state = 'late'"],
     ["SELECT count(*) AS count FROM orders WHERE status = 'new' AND (payment_method = 'cod' OR payment_status = 'paid')"],
-    ["SELECT count(*) AS count FROM order_returns WHERE state = 'requested'"],
+    ["SELECT (SELECT count(*) FROM order_returns WHERE state='requested')+(SELECT count(*) FROM rma_cases WHERE state='requested') AS count"],
   ]);
   return {
     ...results[0].results[0], visitors: results[1].results[0].visitors, converted: results[2].results[0].converted,
