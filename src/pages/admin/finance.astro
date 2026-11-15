@@ -1,6 +1,9 @@
 ---
 import { env } from 'cloudflare:workers';
 import Admin from '../../layouts/Admin.astro';
+import SimpleFinance from '../../components/admin/SimpleFinance.astro';
+import { saveStockPlan } from '../../lib/finance-simple.js';
+import { formData,formError } from '../../lib/http.js';
 import FinanceForm from '../../components/admin/FinanceForm.astro';
 import { currentUser,emailReady } from '../../lib/auth.js';
 import { money } from '../../lib/content.js';
@@ -10,6 +13,8 @@ import { metaReady } from '../../lib/finance-meta.js';
 import { dateRangeLabel,metricChange } from '../../lib/reporting.js';
 import { makeToken } from '../../lib/db.js';
 const user=await currentUser(env,Astro,'admin');if(!user)return Astro.redirect('/admin/login',303);
+if(Astro.request.method==='POST'){try{await saveStockPlan(env.DB,await formData(Astro.request),user.email);return Astro.redirect('/admin/finance?saved=1',303);}catch(error){return formError(error,'/admin/finance');}}
+const simple=!Astro.url.searchParams.has('tab')&&!Astro.url.searchParams.has('advice');
 const f=await financeReport(env.DB,Astro.url),today=f.range.today;
 const tabs=[['overview','Overview'],['accountant','AI accountant'],['cash','Cash & ledger'],['drops','Drops & production'],['inventory','Inventory & PR'],['marketing','Marketing'],['planning','Planning'],['settings','Alerts & controls']];
 const tab=tabs.some(([key])=>key===Astro.url.searchParams.get('tab'))?Astro.url.searchParams.get('tab'):'overview';
@@ -35,9 +40,10 @@ const cards=[['Recognized revenue',f.revenue,'Delivered/fulfilled orders, after 
 <Admin title="Finance" user={user}>
  <link rel="stylesheet" href="/admin/finance.css"/>
  <script is:inline src="/admin/finance.js" defer></script>
- <div class="finance-root">
-  <header class="fin-header"><div><p class="fin-eyebrow">UNLISTED / FINANCIAL OPERATING SYSTEM</p><h1>Your money. In focus.</h1><p>One workspace for cash, clothing drops and confident decisions.</p></div><a class="fin-button secondary" href={'/admin/finance-export.csv'+Astro.url.search}>Export report ↗</a></header>
-  <nav class="fin-tabs" aria-label="Finance sections">{tabs.map(([key,label])=><a href={link(key)} aria-current={tab===key?'page':undefined}>{label}</a>)}</nav>
+ {simple?<SimpleFinance f={f}/>:<div class="finance-root">
+ <a class="fin-button secondary" href="/admin/finance">← Back to my stock</a>
+  <header class="fin-header"><div><p class="fin-eyebrow">UNLISTED / FINANCE</p><h1>Your finance tools.</h1><p>One workspace for cash, clothing drops and confident decisions.</p></div><a class="fin-button secondary" href={'/admin/finance-export.csv'+Astro.url.search}>Export report ↗</a></header>
+
   {error&&<p role="alert" class="fin-error">{error}</p>}
   <form method="get" class="fin-range"><input type="hidden" name="tab" value={tab}/><label>From<input name="start" type="date" value={f.range.current.startDate} max={today}/></label><label>To<input name="end" type="date" value={f.range.current.endDate} max={today}/></label><label>Compare<select name="compare"><option value="previous" selected={f.range.comparison==='previous'}>Previous period</option><option value="year" selected={f.range.comparison==='year'}>Previous year</option><option value="none" selected={f.range.comparison==='none'}>No comparison</option></select></label><button>Apply</button><span>{dateRangeLabel(f.range.current)} · EGP · Cairo</span></form>
   {f.range.error&&<p class="fin-error">{f.range.error}</p>}
@@ -89,5 +95,5 @@ const cards=[['Recognized revenue',f.revenue,'Delivered/fulfilled orders, after 
    <section class="fin-panel"><h2>Historical cost evidence</h2><p class="fin-muted">{f.missingCosts.length} order items need original costs. Current product costs never overwrite historical ones.</p><FinanceForm tab={tab} op="historical_cost" fields={[select('source','Source',[['website','Website'],['shopify','Shopify history'],['exchange','Exchange replacement']]),text('order_id','Order ID'),text('variant_key','Variant ID / historical SKU'),amount('unit_cost','Original unit cost (EGP)')]} submit="Confirm historical cost"/><div class="fin-table"><table><thead><tr><th>Source / order</th><th>Product</th><th>Variant key</th><th>Units</th></tr></thead><tbody>{f.missingCosts.slice(0,60).map(m=><tr><td>{m.source}<small>{m.order_id}</small></td><td>{m.label}</td><td>{m.variant_key}</td><td>{m.quantity}</td></tr>)}</tbody></table></div></section>
    <section class="fin-panel"><h2>Audit trail</h2><div class="fin-table"><table><thead><tr><th>Time (Cairo)</th><th>Actor</th><th>Action</th><th>Record</th></tr></thead><tbody>{f.audit.map(a=><tr><td>{new Date(a.created_at*1000).toLocaleString('en-GB',{timeZone:'Africa/Cairo'})}</td><td>{a.actor}</td><td>{a.action}</td><td><code>{a.entity}</code></td></tr>)}</tbody></table></div></section>
   </>}
- </div>
+ </div>}
 </Admin>
