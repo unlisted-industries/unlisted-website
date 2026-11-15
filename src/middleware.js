@@ -3,7 +3,7 @@ import { env } from 'cloudflare:workers';
 import { ensureWorkspace } from './lib/workspace-schema.js';
 import { recordVisitor } from './lib/live-visitors.js';
 
-const protectedPaths = /^(?:\/(?:admin|account|orders|api|cart|checkout|payment-test)(?:\/|$))/;
+const protectedPaths = /^(?:\/(?:returns|admin|account|orders|api|cart|checkout|payment-test)(?:\/|$))/;
 const storefrontPaths = /^\/(?:$|products\/|collections\/|pages\/)/;
 
 export const onRequest = defineMiddleware(async (context, next) => {

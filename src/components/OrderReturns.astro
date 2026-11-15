@@ -1,22 +1,15 @@
 ---
 import { env } from 'cloudflare:workers';
 import Notice from './Notice.astro';
-import { makeToken } from '../lib/db.js';
-import { displayDate, money } from '../lib/content.js';
+import { money } from '../lib/content.js';
 import { customerReturns, returnLabel } from '../lib/returns.js';
 
 const { order, lines } = Astro.props;
-const { eligible, requests, choices, expires } = await customerReturns(env.DB, order);
-const canRefund = ['paid', 'unpaid'].includes(order.payment_status);
-const available = lines.map((line) => ({
-  ...line,
-  remaining: line.quantity - requests.filter((row) => row.variant_id === line.variant_id &&
-    !['declined', 'cancelled'].includes(row.state)).reduce((sum, row) => sum + row.quantity, 0),
-  replacements: choices.filter((row) => row.original === line.variant_id),
-})).filter((line) => line.remaining > 0 && (canRefund || line.replacements.length));
+const { requests } = await customerReturns(env.DB, order);
 ---
 <section class="order-returns" id="returns">
-  <h2>Returns &amp; size exchanges</h2>
+  <h2>Returns &amp; exchanges</h2>
+  <p><a class="btn" href={"/returns?order=website:" + order.id}>START OR TRACK A RETURN / EXCHANGE</a></p>
   {(Astro.url.searchParams.has('return-request') || Astro.url.searchParams.has('return-sent')) &&
     <Notice success={Astro.url.searchParams.has('return-sent') ? 'Request received. Check this page for updates.' : null} />}
   {requests.length > 0 && <ul class="return-history">
@@ -27,30 +20,7 @@ const available = lines.map((line) => ({
       {row.reference && <small>{row.kind === 'refund' ? 'Refund ' + money(row.refund_amount) : 'Replacement tracking'} · {row.reference}</small>}
     </li>)}
   </ul>}
-  {eligible && available.length ? <>
-    <p>Request a return or a different size for an unworn item.{expires && ' Request by ' + displayDate(expires) + '.'} <a href="/pages/shipping">View the returns policy</a>.</p>
-    {available.map((line) => <details class="return-item">
-      <summary>{line.product_title} · {line.variant_title}</summary>
-      <form class="return-form" method="post" action="/api/return-request">
-        <input type="hidden" name="order" value={order.id} />
-        <input type="hidden" name="variant" value={line.variant_id} />
-        <input type="hidden" name="request_id" value={makeToken(16)} />
-        <div class="return-fields">
-          <label>Request type<select name="kind" required>
-            {canRefund && <option value="refund">Return for refund</option>}
-            {line.replacements.length > 0 && <option value="exchange">Size exchange</option>}
-          </select></label>
-          <label>Quantity<input type="number" name="quantity" min="1" max={line.remaining} value="1" required /></label>
-        </div>
-        {line.replacements.length > 0 && <label>Replacement size for exchanges<select name="replacement">
-          <option value="">Choose a size for an exchange</option>
-          {line.replacements.map((choice) => <option value={choice.id}>{choice.title}</option>)}
-        </select></label>}
-        <label>Reason<textarea name="reason" rows="3" maxlength="800" required></textarea></label>
-        <button class="btn" type="submit">SUBMIT REQUEST</button>
-      </form>
-    </details>)}
-  </> : <p>{order.status !== 'delivered' ? 'Requests open after delivery.' : !eligible ? 'The online request window has closed.' : 'There are no items available for another request.'} <a href="/pages/contact">Contact us</a> for help.</p>}
+
 </section>
 
 <style>

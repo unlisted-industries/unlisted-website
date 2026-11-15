@@ -4,7 +4,7 @@ import { getSettings } from '../lib/catalog.js';
 import { cartCount } from '../lib/cart.js';
 import { safeLink } from '../lib/content.js';
 
-const { title, description = 'A Matter of Taste.', noIndex = false } = Astro.props;
+const { title, description = 'A Matter of Taste.', noIndex = false, lang = 'en' } = Astro.props;
 const [store, count] = await Promise.all([getSettings(Astro, env.DB), cartCount(env.DB, Astro)]);
 const collections = store.navigation.filter((link) => link.group === 'collections' && safeLink(link.url));
 const navigation = store.navigation.filter((link) => link.group !== 'collections' && safeLink(link.url) && !/size[ -]?guide/i.test(link.label) && link.url !== '#SizeGuide');
@@ -12,7 +12,7 @@ const supportOrder = ['/pages/contact', '/pages/shipping', '/pages/about-us'];
 const support = supportOrder.flatMap((url) => navigation.filter((link) => link.url === url));
 ---
 <!doctype html>
-<html lang="en">
+<html lang={lang}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -72,6 +72,7 @@ const support = supportOrder.flatMap((url) => navigation.filter((link) => link.u
           </div>
           <div>
             <h3>SUPPORT</h3>
+            <a href="/returns">Returns & exchanges</a>
             {support.map((link) => <a href={link.url}>{link.url === '/pages/contact' && link.label === 'Contact Us' ? 'Contact us' : link.label}</a>)}
           </div>
         </div>

@@ -1,0 +1,86 @@
+---
+import { env } from 'cloudflare:workers';
+import Store from '../layouts/Store.astro';
+import Notice from '../components/Notice.astro';
+import ReturnRights from '../components/ReturnRights.astro';
+import { currentUser,emailReady } from '../lib/auth.js';
+import { all,makeToken,sha256 } from '../lib/db.js';
+import { unifiedOrders,orderReference } from '../lib/order-history.js';
+import { ensureRma,rmaOrder,buildRmaQuote,replacementChoices,caseDetail,policy } from '../lib/rma.js';
+import { reasons,rmaStates } from '../lib/rma-math.js';
+import { money,displayDate } from '../lib/content.js';
+import { formData,StoreError } from '../lib/http.js';
+await ensureRma(env.DB);
+const ar=Astro.url.searchParams.get('lang')==='ar',lang=ar?'ar':'en',t=(en,arabic)=>ar?arabic:en;
+const user=await currentUser(env,Astro),p=await policy(env.DB);
+const offset=Math.max(0,Math.min(10000,parseInt(Astro.url.searchParams.get('offset')||'0')||0));
+const orders=user?await unifiedOrders(env.DB,{email:user.email,q:Astro.url.searchParams.get('q')?.slice(0,100)||'',offset}):[];
+const requests=user?await all(env.DB.prepare('SELECT * FROM rma_cases WHERE email=? COLLATE NOCASE ORDER BY created_at DESC LIMIT 100').bind(user.email)):[];
+const detail=user?await caseDetail(env.DB,Astro.url.searchParams.get('request'),user.email):null;
+let order=user?await rmaOrder(env.DB,Astro.url.searchParams.get('order'),user.email):null,review=null,submitted=null,error='';
+if(Astro.request.method==='POST')try {
+ if(!user)throw new StoreError('Sign in before requesting a return.');
+ submitted=await formData(Astro.request);order=await rmaOrder(env.DB,submitted.get('order'),user.email);
+ if(!order)throw new StoreError('Order not found.');
+ review=await buildRmaQuote(env.DB,order,submitted);
+}catch(e){error=e instanceof StoreError?e.message:'Unable to prepare the request. Please try again.';}
+const choices=order&&!review?await replacementChoices(env.DB):[];
+const id=makeToken(16),quote=review?await sha256(JSON.stringify(review)):'';
+const resolution=(kind)=>({refund:t('Refund to original payment method','استرداد بطريقة الدفع الأصلية'),exchange:t('Exchange','استبدال'),credit:t('Store credit (optional)','رصيد متجر (اختياري)')})[kind];
+---
+<Store title={t('Returns & exchanges','الاستبدال والاسترجاع')} noIndex={!!user} lang={lang}>
+ <section class="rma-page" dir={ar?'rtl':'ltr'}>
+  <div class="rma-top"><span class="eyebrow">UNLISTED · AFTER YOUR ORDER</span><a href={'/returns?lang='+(ar?'en':'ar')+(order?'&order='+encodeURIComponent(order.key):detail?'&request='+detail.id:'')}>{ar?'English':'العربية'}</a></div>
+  <h1>{t('RETURNS & EXCHANGES','الاستبدال والاسترجاع')}</h1>
+  <p class="intro">{t('A better fit. A different choice. We’ll take care of the next step.','مقاس أنسب أو اختيار مختلف. تابع كل خطوات طلبك من هنا.')}</p>
+  <Notice success={Astro.url.searchParams.has('sent')?t('Request received. Track every update below.','تم استلام الطلب. تابع التحديثات هنا.'):null}/>
+  {error&&<p role="alert" class="rma-alert">{error}</p>}
+  {!user?<section class="rma-card"><span class="step">01</span><h2>{t('Find your orders securely','الوصول الآمن لطلباتك')}</h2><p>{t('Verify the email used at checkout to see current and previous orders.','أكد البريد الإلكتروني المستخدم عند الشراء لرؤية طلباتك الحالية والسابقة.')}</p>
+   {emailReady(env)?<form method="post" action="/account/session" class="form"><input type="hidden" name="action" value="request"/><label>{t('Email address','البريد الإلكتروني')}<input name="email" type="email" autocomplete="email" required maxlength="254"/></label><button class="btn">{t('EMAIL ME A SECURE SIGN-IN LINK','أرسل رابط تسجيل دخول آمن')}</button></form>:<p>{t('Email verification is temporarily unavailable.','التحقق بالبريد غير متاح مؤقتًا.')}</p>}
+  </section>:detail?<>
+   <a href={'/returns?lang='+lang}>← {t('All requests','كل الطلبات')}</a>
+   <section class="rma-card"><div class="rma-top"><h2>#{detail.id.slice(0,8).toUpperCase()}</h2><span class="rma-badge">{rmaStates[detail.state][ar?1:0]}</span></div>
+    <p>{detail.order_reference} · {resolution(detail.kind)}</p>
+    {detail.lines.map(l=><div class="rma-line"><strong>{l.quantity} × {l.title}</strong>{l.replacement_id&&<p>→ {l.replacement_title}</p>}</div>)}
+    <dl class="rma-totals"><div><dt>{t('Returned items','قيمة المنتجات')}</dt><dd>{money(detail.item_value,true)}</dd></div><div><dt>{t('Return shipping / service fee','رسوم الاسترجاع')}</dt><dd>{money(detail.fee,true)}</dd></div>{detail.shipping_refund>0&&<div><dt>{t('Original delivery refund','استرداد الشحن الأصلي')}</dt><dd>{money(detail.shipping_refund,true)}</dd></div>}{detail.kind==='exchange'&&<div><dt>{t('Replacement items','قيمة المنتجات البديلة')}</dt><dd>{money(detail.replacement_value,true)}</dd></div>}<div><dt>{detail.settlement>0?t('Difference to pay','فرق السعر المستحق'):t('Refund / credit due','المبلغ المستحق لك')}</dt><dd>{money(Math.abs(detail.settlement),true)}</dd></div></dl>
+    {detail.eligibility==='customer_review'&&<form class="form" action="/api/returns" method="post"><input type="hidden" name="operation" value="accept-evidence"/><input type="hidden" name="id" value={detail.id}/><input type="hidden" name="version" value={detail.version}/><input type="hidden" name="language" value={lang}/><p>{t('We verified the original order evidence. Please review the amounts above before confirming.','تمت مراجعة بيانات الطلب الأصلي. يرجى مراجعة المبالغ أعلاه قبل التأكيد.')}</p><label class="rma-check"><input type="checkbox" name="accept_quote" required/>{t('I accept these updated amounts.','أوافق على المبالغ المحدّثة.')}</label><button class="btn">{t('CONFIRM UPDATED REQUEST','تأكيد الطلب المحدّث')}</button></form>}
+    {detail.message&&<p class="preserve">{detail.message}</p>}
+    {detail.credit&&<p>{t('Your personal store credit code','كود رصيد متجرك الشخصي')}: <strong>{detail.credit.code}</strong> · {t('Remaining','المتبقي')} {money(detail.credit.balance,true)}. {t('Sign in and enter this code at checkout. Unused credit stays available.','سجّل الدخول وأدخل الكود عند الدفع. يظل الرصيد غير المستخدم متاحًا.')}</p>}
+    {detail.reference&&<p>{t('Settlement reference','مرجع التسوية')}: {detail.reference}</p>}
+    {detail.replacement&&<p>{t('Replacement order','طلب الاستبدال')}: {detail.replacement.id.slice(0,16)} · {detail.replacement.state}</p>}
+    {detail.shipments.map(s=><p><strong>{s.provider.toUpperCase()} · {s.direction==='return'?t('Return pickup','استلام المرتجع'):t('Replacement delivery','توصيل البديل')}</strong><br/>{s.tracking} · {s.status}</p>)}
+   </section>
+   <section class="rma-card"><h2>{t('Activity','تاريخ الطلب')}</h2><ol class="timeline">{detail.events.map(e=><li><strong>{rmaStates[e.action]?.[ar?1:0]||e.action}</strong><small>{displayDate(e.created_at)}</small>{e.detail&&<p>{e.detail}</p>}</li>)}</ol></section>
+  </>:review?<section class="rma-card"><span class="step">03</span><h2>{t('Review your request','راجع طلبك')}</h2><p>{order.reference} · {resolution(review.kind)}</p>
+   {review.lines.map(l=><div class="rma-line"><strong>{l.quantity} × {l.title}</strong>{l.replacement_id&&<p>→ {l.replacement_title} · {money(l.replacement_price*l.quantity,true)}</p>}<p>{t('Return value','قيمة المرتجع')}: {money(l.value,true)}</p></div>)}
+   <dl class="rma-totals"><div><dt>{t('Return fee','رسوم الاسترجاع')}</dt><dd>{money(review.fee,true)}</dd></div><div><dt>{t('Original delivery refund','استرداد الشحن الأصلي')}</dt><dd>{money(review.shipping_refund,true)}</dd></div><div><dt>{review.settlement>0?t('Price difference to pay','فرق السعر المستحق'):t('Refund / credit due','المبلغ المستحق لك')}</dt><dd>{review.verified?money(Math.abs(review.settlement),true):t('Pending evidence review','بانتظار مراجعة البيانات')}</dd></div></dl>
+   {review.elig.code!=='eligible'&&<p>{t('This request needs a delivery-date or policy review. You can still submit it.','يحتاج الطلب مراجعة تاريخ التسليم أو شروط السياسة. يمكنك إرساله للمراجعة.')}</p>}
+   <p>{t('Items are inspected before refunding or restocking. Replacement stock is reserved only on approval. Any extra payment or refund is tracked before completion.','يتم فحص المنتجات قبل رد المبلغ أو إضافتها للمخزون. يُحجز البديل عند الموافقة، وتُسجل فروق السعر قبل إكمال الطلب.')}</p>
+   <form method="post" action="/api/returns" enctype="multipart/form-data" class="form">
+    {[...submitted.entries()].filter(([k,v])=>typeof v==='string'&&!['request_id','quote','accept_quote','language'].includes(k)).map(([k,v])=><input type="hidden" name={k} value={String(v)}/>)}
+    <input type="hidden" name="request_id" value={id}/><input type="hidden" name="quote" value={quote}/><input type="hidden" name="language" value={lang}/>
+    <label>{t('Photos (optional, up to 3; 5 MB each)','صور اختيارية (٣ صور بحد أقصى، ٥ ميجابايت للصورة)')}<input name="photos" type="file" accept="image/jpeg,image/png,image/webp" multiple/></label>
+    <label class="rma-check"><input name="accept_quote" type="checkbox" required/>{t('I confirm these items and the displayed amounts. Store credit, if selected, is my choice.','أؤكد المنتجات والمبالغ المعروضة. اختيار رصيد المتجر إن وجد هو اختياري.')}</label>
+    <button class="btn">{t('SUBMIT REQUEST','إرسال الطلب')}</button>
+   </form>
+  </section>:order?<section class="rma-card"><span class="step">02</span><h2>{t('Choose what happens next','اختر الخطوة التالية')} · {order.reference}</h2>
+   <form method="post" action={'/returns?lang='+lang} class="form"><input type="hidden" name="order" value={order.key}/>
+    {order.lines.filter(l=>l.quantity>l.used).map(l=><fieldset class="rma-line"><label class="rma-check"><input name={'select:'+l.key} type="checkbox"/>{l.title}</label><div class="rma-grid"><label>{t('Quantity','الكمية')}<input name={'quantity:'+l.key} type="number" value="1" min="1" max={Math.min(25,l.quantity-l.used)}/></label><label>{t('Replacement (for exchanges)','البديل (لطلبات الاستبدال)')}<select name={'replacement:'+l.key}><option value="">{t('Choose size, color or another product','اختر المقاس أو اللون أو منتجًا آخر')}</option>{choices.map(v=><option value={v.id}>{v.product} · {v.title} · {money(v.price,true)}</option>)}</select></label></div></fieldset>)}
+    <label>{t('Resolution','نوع الطلب')}<select name="kind"><option value="refund">{resolution('refund')}</option><option value="exchange">{resolution('exchange')}</option><option value="credit">{resolution('credit')}</option></select></label>
+    <label>{t('Reason','السبب')}<select name="reason">{Object.entries(reasons).map(([k,v])=><option value={k}>{v[ar?1:0]}</option>)}</select></label>
+    <label>{t('Anything we should know? (optional)','تفاصيل إضافية (اختياري)')}<textarea name="reason_note" rows="3" maxlength="800"/></label>
+    <button class="btn" disabled={!order.lines.some(l=>l.quantity>l.used)}>{t('REVIEW AMOUNTS & CONTINUE','مراجعة المبالغ والمتابعة')}</button>
+   </form>
+  </section>:<>
+   <section class="rma-card"><span class="step">01</span><h2>{t('Choose an order','اختر الطلب')}</h2><form method="get" class="rma-search"><input type="hidden" name="lang" value={lang}/><input name="q" aria-label={t('Order number','رقم الطلب')} placeholder={t('Search order number','ابحث برقم الطلب')} value={Astro.url.searchParams.get('q')||''}/><button class="btn">{t('SEARCH','بحث')}</button></form>
+    {orders.length?<ul class="order-list">{orders.slice(0,25).map(o=><li><div><strong>{orderReference(o)}</strong><small>{displayDate(o.created_at)} · {money(o.total,true)}</small></div><a class="rma-link" href={'/returns?lang='+lang+'&order='+encodeURIComponent(o.historical?'shopify:'+o.id.slice(8):'website:'+o.id)}>{t('RETURN / EXCHANGE','استبدال / استرجاع')} →</a></li>)}</ul>:<p>{t('No matching orders for this verified email.','لا توجد طلبات مطابقة لهذا البريد المؤكد.')}</p>}
+    {orders.length>25&&<a href={'/returns?lang='+lang+'&offset='+(offset+25)}>{t('More orders','المزيد')}</a>}
+   </section>
+   <section class="rma-card"><h2>{t('Your requests','طلبات الاستبدال والاسترجاع')}</h2>{requests.length?<ul class="order-list">{requests.map(r=><li><div><a href={'/returns?request='+r.id+'&lang='+lang}>#{r.id.slice(0,8).toUpperCase()} · {r.order_reference}</a><small>{resolution(r.kind)}</small></div><span class="rma-badge">{rmaStates[r.state][ar?1:0]}</span></li>)}</ul>:<p>{t('No requests yet.','لا توجد طلبات حتى الآن.')}</p>}</section>
+  </>}
+  <ReturnRights ar={ar}/>
+ </section>
+</Store>
+<style>
+ .rma-page{max-width:920px;margin:0 auto;padding:56px 24px 72px;color:var(--navy)}.rma-top{display:flex;gap:16px;align-items:center;justify-content:space-between}.eyebrow,.step{font-size:11px;letter-spacing:2px;font-weight:700}.rma-page h1{font-size:clamp(26px,5vw,46px);line-height:1.12;margin:24px 0 12px}.intro{font-size:16px;max-width:590px;line-height:1.7;margin-bottom:32px}.rma-card{border:1px solid #dce0e6;padding:28px;margin-block:20px;border-radius:4px}.rma-card h2{font-size:22px;margin:10px 0 16px}.rma-line{border:0;border-bottom:1px solid #e0e3e7;padding:16px 0;margin:0;min-width:0}.rma-grid{display:grid;grid-template-columns:100px minmax(0,1fr);gap:18px;margin-top:12px}.rma-page :is(input,select,textarea){font:inherit;max-width:100%;min-height:44px;border:1px solid #9da6b4;background:white;color:inherit;padding:10px}.rma-page select{width:100%}.rma-check{display:flex!important;align-items:center;gap:12px}.rma-check input{width:18px!important;height:18px;min-height:18px;flex:none}.rma-badge{background:#eef1f5;border-radius:30px;padding:7px 12px;font-size:12px}.rma-totals{background:#f5f6f8;padding:20px;margin-block:20px}.rma-totals>div{display:flex;gap:16px;justify-content:space-between;padding:8px 0}.rma-totals>div:last-child{border-top:1px solid #dce0e6;font-weight:700}.order-list{list-style:none;padding:0}.order-list li{display:flex;gap:16px;align-items:center;justify-content:space-between;padding:18px 0;border-top:1px solid #e0e3e7}.order-list small,.timeline small{display:block;color:#637083;margin-top:6px}.rma-link{font-size:11px;letter-spacing:1px;font-weight:700}.timeline{padding-inline-start:22px}.timeline li{padding:8px 0 16px}.timeline p,.preserve{white-space:pre-wrap;overflow-wrap:anywhere}.rma-search{display:flex;gap:10px;margin:18px 0}.rma-search input{min-width:0;flex:1}.rma-search .btn{margin:0}.rma-alert{padding:18px;background:#fff1ed}.rma-page[dir=rtl]{font-family:Arial,sans-serif}.rma-page[dir=rtl] .eyebrow{letter-spacing:0}@media(max-width:600px){.rma-page{padding:32px 16px}.rma-card{padding:18px}.rma-top,.order-list li{align-items:flex-start;flex-wrap:wrap}.rma-grid{grid-template-columns:1fr}.rma-search{flex-wrap:wrap}.rma-badge{font-size:11px}}
+</style>

@@ -17,7 +17,7 @@ if (!order) Astro.response.status=404;
     <ul class="account-orders">{JSON.parse(order.line_items).map(line => <li>{line.quantity} × {line.name}{line.sku && ' · ' + line.sku}</li>)}</ul>
     <p>Total: {order.amount} {order.currency}</p>
     <dl class="store-totals">{fields.filter(key => header[key]).map(key => <div><dt>{key}</dt><dd>{header[key]}</dd></div>)}</dl>
-    <p><a href="/pages/contact">Contact us about this order</a></p>
+    <p><a class="btn" href={"/returns?order=shopify:" + order.source_id}>RETURN / EXCHANGE</a></p>
   </> : <p>Sign in with the email used for this order.</p>}
   <p><a href="/account">My account</a></p>
 </section></Store>
