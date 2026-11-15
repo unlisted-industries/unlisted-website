@@ -1,3 +1,4 @@
+import { ensureRma } from './rma.js';
 import { ensureFinance,journal } from './finance.js';
 import { reportingRange } from './reporting.js';
 import { decimalMoney,scenario } from './finance-math.js';
@@ -16,7 +17,7 @@ export async function snapshotCosts(db) {
  if(legacy.length)await db.batch(legacy.map(t=>journal(db,{source:'legacy:'+t.id,day:t.occurred_on,kind:t.kind,category:t.category,drop:t.drop_id,note:t.note,actor:'legacy import',postings:postingsFor(t.kind,t.account,t.amount)})));
 }
 export async function financeReport(db,url) {
- await ensureFinance(db);await snapshotCosts(db);
+ await ensureRma(db);await snapshotCosts(db);
  const range=reportingRange(url);
  const [journals,balances,variants,drops,products,orders,items,returns,history,historyDetails,historicalCosts,attribution,links,prGifts,batches,notifications,settings,meta,audit,imports]=await Promise.all([
  all(db,'SELECT * FROM finance_journals ORDER BY occurred_on DESC,created_at DESC'),
@@ -97,6 +98,35 @@ export async function financeReport(db,url) {
   }
   if(refund>0)warnings.add('Historical refunds are netted against original Shopify order dates when separate refund timestamps are unavailable.');
  }
+ // RMA adjustments are event-backed, never duplicate original orders or sale journals.
+ const rmaCases=await all(db,"SELECT * FROM rma_cases WHERE state IN('received','completed')");
+ const rmaLines=await all(db,'SELECT l.*,v.product_id FROM rma_lines l LEFT JOIN variants v ON v.id=l.variant_id');
+ const rmaLedger=await all(db,'SELECT * FROM rma_ledger');
+ const rmaShipping=await all(db,'SELECT * FROM rma_shipments WHERE cost>0');
+ const creditUses=await all(db,`SELECT u.*,o.status,o.created_at,coalesce(d.delivered_at,o.updated_at) delivered_at FROM rma_credit_uses u JOIN orders o ON o.id=u.order_id LEFT JOIN order_deliveries d ON d.order_id=o.id WHERE u.released=0`);
+ for(const use of creditUses)if(use.status==='delivered')add('revenue',use.amount,dayOf(use.delivered_at),{source:'credit_redemption',order:use.order_id});
+ for(const c of rmaCases) {
+  const source=c.source_key.startsWith('website:')?'website':'shopify',order=c.source_key.slice(8),campaign=attr.get(source+':'+order)||null;
+  const rows=rmaLines.filter(l=>l.case_id===c.id),records=rmaLedger.filter(l=>l.case_id===c.id);
+  const receipt=await db.prepare("SELECT created_at FROM rma_events WHERE case_id=? AND action='received' ORDER BY created_at LIMIT 1").bind(c.id).first('created_at');
+  for(const l of rows)if(l.restocked) {
+   if(l.unit_cost==null)warnings.add('Some returned items have no verified original sold cost; COGS reversal awaits evidence.');
+   else add('cogs',-l.unit_cost*l.quantity,dayOf(receipt||c.updated_at),{product:l.product_id,campaign});
+  }
+  for(const entry of records) {
+   if(entry.kind==='difference') {add('collected',entry.amount,dayOf(entry.created_at),{source,order,campaign});clearing+=entry.amount;continue;}
+   if(!['refund','credit','exchange'].includes(entry.kind))continue;
+   add('revenue',entry.amount,dayOf(entry.created_at),{source,order,campaign});
+   if(entry.kind==='refund'){add('collected',entry.amount,dayOf(entry.created_at),{source,order,campaign});clearing+=entry.amount;}
+   if(entry.kind==='exchange') {
+    if(!records.some(r=>r.kind==='difference')){add('collected',entry.amount,dayOf(entry.created_at),{source,order,campaign});clearing+=entry.amount;}
+    for(const l of rows)if(l.replacement_cost==null)missingCosts.push({source:'exchange',order_id:c.id,variant_key:l.replacement_id,label:l.replacement_title,quantity:l.quantity,day:dayOf(entry.created_at)});else add('cogs',l.replacement_cost*l.quantity,dayOf(entry.created_at),{campaign});
+   }else for(const l of rows)add('product_revenue',-l.value,dayOf(entry.created_at),{product:l.product_id,campaign});
+  }
+ }
+ for(const s of rmaShipping)add('expense',s.cost,dayOf(s.created_at),{category:'shipping',source:'returns',order:s.case_id});
+ const storeCreditLiability=await db.prepare('SELECT coalesce(sum(balance),0) amount FROM rma_credit').first('amount');
+ customerLiability+=storeCreditLiability;
  for(const j of journals)for(const p of safeJson(j.postings)) {
   const type={expense:'expense',pr_expense:'pr',revenue:'other_income'}[p.account];
   if(type)add(type,type==='other_income'?-p.amount:p.amount,j.occurred_on,{category:j.category,drop:j.drop_id,campaign:j.campaign_id});
