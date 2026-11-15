@@ -1,4 +1,5 @@
-import { ensureFinance } from './finance.js';
+import { ensureSimpleFinance } from './finance-simple.js';
+import { telegramReady } from './order-notifications.js';
 import { financeDay,reminderDue } from './finance-math.js';
 import { adminEmails,emailReady,sendEmail } from './auth.js';
 import { makeToken } from './db.js';
@@ -6,10 +7,11 @@ import { metaReady,syncMeta } from './finance-meta.js';
 async function notify(env,dedupe,kind,title,message,email=false) {
  const id=makeToken(16);
  await env.DB.prepare('INSERT OR IGNORE INTO finance_notifications(id,dedupe,kind,title,message) VALUES(?,?,?,?,?)').bind(id,dedupe,kind,title,message).run();
+ await env.DB.prepare(`INSERT OR IGNORE INTO finance_telegram_outbox(notification_id) SELECT id FROM finance_notifications WHERE dedupe=?`).bind(dedupe).run();
  if(email)for(const recipient of adminEmails(env))await env.DB.prepare(`INSERT OR IGNORE INTO finance_email_outbox(id,notification_id,recipient) SELECT ?,id,? FROM finance_notifications WHERE dedupe=?`).bind(makeToken(16),recipient,dedupe).run();
 }
 export async function financeAlerts(env,now=new Date()) {
- await ensureFinance(env.DB);
+ await ensureSimpleFinance(env.DB);
  const today=financeDay(now),settings=await env.DB.prepare('SELECT * FROM finance_settings WHERE id=1').first();
  if(settings.daily_reminder&&reminderDue(now))await notify(env,'balance:'+today,'balance','Daily balance check','Please submit today’s bank statement or bank and cash balances in UNLISTED Finance.',''+settings.email_reminder==='1');
  const rows=(await env.DB.prepare(`SELECT v.id,v.inventory,v.title,p.title product,t.threshold,t.target FROM finance_thresholds t JOIN variants v ON v.id=t.variant_id JOIN products p ON p.id=v.product_id WHERE v.inventory IS NOT NULL`).all()).results;
@@ -34,6 +36,7 @@ export async function financeAlerts(env,now=new Date()) {
   if(!existing)await notify(env,'risk:reserve','risk','Cash buffer at risk','Reported cash is below recorded debts plus your configured reserve. Review spending before new commitments.',settings.email_reminder===1);
   else if(existing.state==='resolved'){await env.DB.prepare("UPDATE finance_notifications SET state='active',created_at=unixepoch() WHERE id=?").bind(existing.id).run();await notify(env,'risk:reserve:'+Math.floor(+now/900000),'risk','Cash buffer at risk again','Your latest reported cash is below recorded commitments.',settings.email_reminder===1);}
  }else if(complete)await env.DB.prepare("UPDATE finance_notifications SET state='resolved' WHERE dedupe='risk:reserve'").run();
+ await deliverFinanceTelegram(env);
  if(emailReady(env)) {
   const pending=(await env.DB.prepare(`SELECT o.*,n.title,n.message FROM finance_email_outbox o JOIN finance_notifications n ON n.id=o.notification_id WHERE o.state='pending' AND o.attempts<10 ORDER BY n.created_at LIMIT 10`).all()).results;
   for(const item of pending) {
@@ -51,7 +54,22 @@ export async function runFinanceAutomation(env,now=new Date()) {
 }
 
 export async function queueNotificationTest(env,now=new Date()) {
- await ensureFinance(env.DB);
+ await ensureSimpleFinance(env.DB);
  await notify(env,'delivery-test:'+financeDay(now),'test','Finance notification delivery test','Your UNLISTED finance notifications are working. Your daily bank statement and balance reminder is scheduled for 9 PM Cairo time.',true);
  await financeAlerts(env,now);
+}
+
+export async function deliverFinanceTelegram(env) {
+ if(!telegramReady(env))return;
+ const pending=(await env.DB.prepare(`SELECT o.notification_id,n.title,n.message FROM finance_telegram_outbox o JOIN finance_notifications n ON n.id=o.notification_id WHERE o.state='pending' AND o.attempts<10 AND o.locked_until<unixepoch() AND o.next_attempt_at<=unixepoch() AND n.state='active' AND (n.kind<>'balance' OR n.created_at>=unixepoch()-3600) ORDER BY n.created_at LIMIT 10`).all()).results;
+ for(const item of pending){
+  const lock=await env.DB.prepare(`UPDATE finance_telegram_outbox SET locked_until=unixepoch()+60,attempts=attempts+1 WHERE notification_id=? AND state='pending' AND locked_until<unixepoch() RETURNING locked_until,attempts`).bind(item.notification_id).first();
+  if(!lock)continue;
+  let sent=false;
+  try{
+   const response=await fetch('https://api.telegram.org/bot'+env.TELEGRAM_BOT_TOKEN+'/sendMessage',{method:'POST',headers:{'Content-Type':'application/json'},signal:AbortSignal.timeout(8000),body:JSON.stringify({chat_id:env.TELEGRAM_CHAT_ID,text:'UNLISTED · '+item.title+'\n\n'+item.message+'\n\nhttps://unlisted-shop.com/admin/finance',protect_content:true,disable_notification:false,link_preview_options:{is_disabled:true}})});
+   sent=response.ok&&(await response.json()).ok===true;
+  }catch{/* Never store or log Telegram's token-bearing request URL. */}
+  await env.DB.prepare(`UPDATE finance_telegram_outbox SET state=?,sent_at=CASE WHEN ? THEN unixepoch() ELSE NULL END,locked_until=0,next_attempt_at=unixepoch()+?,last_error=? WHERE notification_id=? AND locked_until=?`).bind(sent?'sent':'pending',Number(sent),Math.min(3600,60*2**Math.min(lock.attempts,5)),sent?'':'Telegram delivery failed; check bot access and phone settings.',item.notification_id,lock.locked_until).run();
+ }
 }
