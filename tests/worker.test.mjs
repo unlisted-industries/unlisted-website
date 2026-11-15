@@ -251,7 +251,7 @@ test('Paymob starts hosted checkout and only a matching signed capture can mark 
   assert.equal((await callback(transaction)).status, 204);
   assert.equal((await callback(transaction)).status, 204);
   assert.equal(await db.prepare("SELECT payment_status FROM orders WHERE provider_order_id='8001'").first('payment_status'), 'paid');
-  assert.match(await (await admin('/admin/finance')).text(), /Collected net sales<\/span><strong>LE 680\.00<\/strong>/);
+  assert.match(await (await admin('/admin/finance?tab=overview')).text(), /Collected net sales<\/span><strong>LE 680\.00<\/strong>/);
   assert.equal(await db.prepare('SELECT count(*) AS total FROM payment_events').first('total'), 1);
   assert.equal(mail.filter((message) => message.to[0] === 'cardbuyer@example.invalid').length, 1);
 
@@ -959,4 +959,50 @@ test('historical evidence updates require owner evidence and customer consent be
  assert.match((await rmaAction(id,'receive',{'restock:0':'on'})).headers.get('Location'),/saved=1/);
  assert.match((await rmaAction(id,'complete',{reference:'HISTORY-REFUND',settlement_verified:'on'})).headers.get('Location'),/saved=1/);
  assert.equal(await db.prepare('SELECT amount FROM rma_ledger WHERE case_id=?').bind(id).first('amount'),-68000);
+});
+
+test('simple stock page saves and edits estimates without changing money or inventory; calculates ads and PR limits',async()=>{
+ const web=browser();assert.equal((await web('/admin/session',{action:'password',password:ownerPassword},{'CF-Connecting-IP':'192.0.2.191'})).headers.get('Location'),'/admin');
+ const form={request_id:'9a'.repeat(16),name:'Simple stock fixture',quantity:'100',total_cost:'40000',price:'1000',fees:'100',ads:'5000',pr_units:'10',pr_cost:'1000',product_id:'finance-p',confirmed:'yes'};
+ const stockBefore=await db.prepare("SELECT inventory FROM variants WHERE id='finance-v'").first('inventory');
+ const journalsBefore=await db.prepare('SELECT count(*) FROM finance_journals').first('count(*)');
+ assert.equal((await browser()('/admin/finance',form)).headers.get('Location'),'/admin/login');
+ assert.equal((await web('/admin/finance',form,{Origin:'https://wrong.invalid'})).status,403);
+ assert.match((await web('/admin/finance',{...form,confirmed:''})).headers.get('Location'),/error=/);
+ assert.match((await web('/admin/finance',form)).headers.get('Location'),/saved=1/);
+ assert.match((await web('/admin/finance',form)).headers.get('Location'),/saved=1/);
+ assert.equal(await db.prepare('SELECT count(*) FROM finance_stock_plans WHERE id=?').bind(form.request_id).first('count(*)'),1);
+ let page=await (await web('/admin/finance')).text();
+ assert.match(page,/Know what your stock can make/);
+ assert.doesNotMatch(page,/Cash &amp; ledger|Owner capital|Expansion investment|Finance sections/);
+ assert.match(page,/Simple stock fixture/);
+ assert.match(page,/35,000\.00/); // 90 × (1000 - 100) - 40,000 - 5,000 - 1,000.
+ assert.match(page,/52 sales/); // Full batch cost and planned ads/PR, not double-counted COGS.
+ assert.match(page,/2\.25×/); // 90,000 full-sellout revenue / 40,000 available for ads.
+ assert.match(page,/444\.44/); // CPA ceiling includes the product costs of PR pieces.
+ assert.match(page,/611\.12/); // Minimum full-sellout price, rounded up to piastre.
+ assert.match(page,/40,000\.00/); // Total ads ceiling, 90 × 900 - 40,000 - 1,000.
+ assert.match(page,/48 pieces total/); // floor(100 - 46,000 / 900).
+ assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id='finance-v'").first('inventory'),stockBefore);
+ assert.equal(await db.prepare('SELECT count(*) FROM finance_journals').first('count(*)'),journalsBefore);
+ const plan=await db.prepare('SELECT * FROM finance_stock_plans WHERE id=?').bind(form.request_id).first();
+ const edited={...form,id:plan.id,revision:String(plan.updated_at),request_id:'9b'.repeat(16),price:'300'};
+ assert.match((await web('/admin/finance',edited)).headers.get('Location'),/saved=1/);
+ page=await (await web('/admin/finance')).text();assert.match(page,/Cannot break even/);assert.match(page,/No room for ads/);
+ assert.match((await web('/admin/finance',{...edited,request_id:'9c'.repeat(16)})).headers.get('Location'),/error=/);
+ assert.equal(await db.prepare("SELECT count(*) FROM finance_requests WHERE id=?").bind('9c'.repeat(16)).first('count(*)'),0);
+ assert.match((await web('/admin/finance',{...form,request_id:'9d'.repeat(16),pr_units:'101'})).headers.get('Location'),/error=/);
+});
+
+test('finance phone test uses Telegram once and retains the same daily reminder schedule',async()=>{
+ const web=browser();assert.equal((await web('/admin/session',{action:'password',password:ownerPassword},{'CF-Connecting-IP':'192.0.2.192'})).headers.get('Location'),'/admin');
+ const before=telegram.length;
+ const response=await web('/admin/finance-action',{op:'test_reminder',confirmed:'yes'});
+ assert.match(response.headers.get('Location'),/saved=1/);
+ assert.ok(telegram.length>before);
+ const texts=telegram.slice(before).filter(n=>n.text.includes('Finance notification delivery test'));
+ assert.equal(texts.length,1);assert.match(texts[0].text,/9 PM Cairo/);assert.equal(texts[0].disable_notification,false);
+ const outbox=await db.prepare("SELECT count(*) FROM finance_telegram_outbox o JOIN finance_notifications n ON n.id=o.notification_id WHERE n.kind='test' AND o.state='sent'").first('count(*)');assert.equal(outbox,1);
+ await web('/admin/finance-action',{op:'test_reminder',confirmed:'yes'});
+ assert.equal(telegram.filter(n=>n.text.includes('Finance notification delivery test')).length,texts.length);
 });
