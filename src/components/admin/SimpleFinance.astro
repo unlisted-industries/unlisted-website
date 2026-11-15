@@ -14,7 +14,7 @@ const fields=[{name:'name',label:'Stock name',value:edit?.name,placeholder:'For 
 {name:'quantity',label:'How many pieces in this stock?',type:'number',min:1,max:1000000,value:edit?.quantity},
 {name:'total_cost',label:'What did the whole stock cost? (EGP)',type:'number',min:0,max:1000000,step:'.01',value:edit?edit.total_cost/100:undefined},
 {name:'price',label:'Selling price per piece (EGP)',type:'number',min:'.01',max:1000000,step:'.01',value:edit?edit.price/100:undefined}];
-const extras=[['fees','Delivery, packaging & payment fees per sale (EGP)'],['ads','Planned ads for this stock (EGP)'],['pr_units','Pieces to give as PR'],['pr_cost','Total PR delivery & influencer fees (EGP)']];
+const extras=[['fees','Delivery you pay, extra packing & payment fees per piece (EGP)'],['ads','Planned ads for this stock (EGP)'],['pr_units','Pieces to give as PR'],['pr_cost','Total PR delivery & influencer fees (EGP)']];
 const spend=f.campaigns.reduce((n,c)=>n+c.spend,0);
 const sent=await env.DB.prepare("SELECT max(sent_at) FROM finance_telegram_outbox WHERE state='sent'").first('max(sent_at)');
 ---
@@ -29,7 +29,7 @@ const sent=await env.DB.prepare("SELECT max(sent_at) FROM finance_telegram_outbo
 <div class="fin-cards compact">
 <article class="fin-stat"><span>Profit if it all sells</span><strong>{display(m.profit)}</strong><small>After this stock’s cost, planned ads, fees and PR. Before other business bills.</small></article>
 <article class="fin-stat"><span>Break-even</span><strong>{m.canBreakEven?m.breakEvenUnits+' sales':'Cannot break even'}</strong><small>{m.canBreakEven?'Sales needed to cover the whole stock and your planned spending.':'Raise the price or reduce costs, ads or PR.'}</small></article>
-<article class="fin-stat"><span>Break-even ROAS</span><strong>{m.breakEvenROAS===null?'No room for ads':m.breakEvenROAS.toFixed(2)+'×'}</strong><small>Your Meta ROAS needs to be higher than this to leave money after product and per-sale costs.</small></article>
+<article class="fin-stat"><span>Break-even ROAS</span><strong>{m.breakEvenROAS===null?'No room for ads':m.breakEvenROAS.toFixed(2)+'×'}</strong><small>Your Meta ROAS needs to be higher than this to cover stock, PR and selling fees.</small></article>
 </div>
 <dl>
 <div><dt>Cost per piece</dt><dd>{display(m.unitCost)}</dd></div>
@@ -39,13 +39,13 @@ const sent=await env.DB.prepare("SELECT max(sent_at) FROM finance_telegram_outbo
 <div><dt>PR limit with your planned ads</dt><dd>{m.maxPR} pieces total</dd></div>
 {p.product_id&&<div><dt>Website stock · all batches of this product</dt><dd>{verified?variants.reduce((n,v)=>n+v.inventory,0)+' pieces':'Stock not verified yet'}</dd></div>}
 </dl>
-<p class="fin-muted">{p.pr_units} PR pieces planned · {m.available} pieces left to sell · Planned ads {money(p.ads)}. Ads and PR limits leave <strong>zero profit</strong> at full sellout. Spend less to keep a profit. These are estimates, not money in your bank. Returns and discounts reduce what you can afford.</p>
+<p class="fin-muted">{p.pr_units} PR pieces planned · {m.available} pieces left to sell · Planned ads {money(p.ads)}. Ads and PR limits leave <strong>zero profit</strong> at full sellout. Spend less to keep a profit. These are estimates, not money in your bank. Ad metrics assume one piece per paid order and full sellout. Returns and discounts reduce what you can afford.</p>
 </section>})}
 <section class="fin-panel" id="add-stock"><h2>{edit?'Edit '+edit.name:'Add your stock'}</h2>
 <form method="post" action="/admin/finance" class="fin-form">
 <input name="request_id" type="hidden" value={makeToken(16)}/><input name="id" type="hidden" value={edit?.id||''}/><input name="revision" type="hidden" value={edit?.updated_at||0}/>
 {fields.map(v=><label><span>{v.label}</span><input name={v.name} type={v.type||'text'} value={v.value} placeholder={v.placeholder} min={v.min} max={v.max} step={v.step} maxlength="80" required/></label>)}
-<p class="fin-muted fin-full">Include all costs of making this stock: fabric, factory, packaging and delivery to you. Enter the total once.</p>
+<p class="fin-muted fin-full">Include all costs of making this stock: fabric, factory, packaging and delivery to you. Enter each cost once. Fees and ads left at zero are assumed to cost nothing.</p>
 <details class="fin-full"><summary>Include ads, PR & selling fees (optional)</summary><div class="fin-form stock-extras">
 {extras.map(([key,label])=><label><span>{label}</span><input name={key} type="number" min="0" max={key==='pr_units'?1000000:1000000} step={key==='pr_units'?'1':'.01'} value={edit?(key==='pr_units'?edit[key]:edit[key]/100):0} required/></label>)}
 <label class="fin-full"><span>Link a website product (optional)</span><select name="product_id"><option value="">Choose later</option>{f.products.map(p=><option value={p.id} selected={edit?.product_id===p.id}>{p.title}</option>)}</select></label>
