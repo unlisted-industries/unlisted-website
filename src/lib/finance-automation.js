@@ -10,23 +10,45 @@ async function notify(env,dedupe,kind,title,message,email=false) {
  await env.DB.prepare(`INSERT OR IGNORE INTO finance_telegram_outbox(notification_id) SELECT id FROM finance_notifications WHERE dedupe=?`).bind(dedupe).run();
  if(email)for(const recipient of adminEmails(env))await env.DB.prepare(`INSERT OR IGNORE INTO finance_email_outbox(id,notification_id,recipient) SELECT ?,id,? FROM finance_notifications WHERE dedupe=?`).bind(makeToken(16),recipient,dedupe).run();
 }
+
+async function updateStockAlert(env, row, email) {
+ const db = env.DB;
+ const key = 'stock:' + row.id;
+ const prefix = key + ':episode:';
+ const matchesVariant = "kind='stock' AND (dedupe=? OR substr(dedupe,1,length(?))=?)";
+ const currentStock = 'SELECT 1 FROM variants v JOIN finance_thresholds t ON t.variant_id=v.id WHERE v.id=? AND v.inventory=? AND t.threshold=?';
+ if (row.inventory > row.threshold) {
+  await db.prepare(`UPDATE finance_notifications SET state='resolved'
+    WHERE state IN ('active','read') AND ${matchesVariant} AND EXISTS(${currentStock})`)
+   .bind(key,prefix,prefix,row.id,row.inventory,row.threshold).run();
+  return;
+ }
+
+ // The alert and its delivery queue are created together. Concurrent checks
+ // see the active episode, and a later crossing gets a new delivery key.
+ const id = makeToken(16);
+ const message = row.product + ' / ' + row.title + ': ' + row.inventory + ' remaining; target ' + row.target + '.';
+ const commands = [
+  db.prepare(`INSERT INTO finance_notifications(id,dedupe,kind,title,message)
+    SELECT ?,?,'stock','Factory restock needed',?
+    WHERE EXISTS(${currentStock})
+    AND NOT EXISTS(SELECT 1 FROM finance_notifications WHERE state IN ('active','read') AND ${matchesVariant})`)
+   .bind(id,prefix+id,message,row.id,row.inventory,row.threshold,key,prefix,prefix),
+  db.prepare('INSERT INTO finance_telegram_outbox(notification_id) SELECT id FROM finance_notifications WHERE id=?').bind(id),
+ ];
+ if (email) for (const recipient of adminEmails(env)) {
+  commands.push(db.prepare('INSERT INTO finance_email_outbox(id,notification_id,recipient) SELECT ?,id,? FROM finance_notifications WHERE id=?')
+   .bind(makeToken(16),recipient,id));
+ }
+ await db.batch(commands);
+}
+
 export async function financeAlerts(env,now=new Date()) {
  await ensureSimpleFinance(env.DB);
  const today=financeDay(now),settings=await env.DB.prepare('SELECT * FROM finance_settings WHERE id=1').first();
  if(settings.daily_reminder&&reminderDue(now))await notify(env,'balance:'+today,'balance','Daily balance check','Please submit today’s bank statement or bank and cash balances in UNLISTED Finance.',''+settings.email_reminder==='1');
  const rows=(await env.DB.prepare(`SELECT v.id,v.inventory,v.title,p.title product,t.threshold,t.target FROM finance_thresholds t JOIN variants v ON v.id=t.variant_id JOIN products p ON p.id=v.product_id WHERE v.inventory IS NOT NULL`).all()).results;
- for(const row of rows) {
-  const key='stock:'+row.id;
-  if(row.inventory<=row.threshold) {
-   const old=await env.DB.prepare('SELECT id,state FROM finance_notifications WHERE dedupe=?').bind(key).first();
-   if(!old)await notify(env,key,'stock','Factory restock needed',row.product+' / '+row.title+': '+row.inventory+' remaining; target '+row.target+'.',settings.email_reminder===1);
-   else if(old.state==='resolved') {
-    await env.DB.prepare("UPDATE finance_notifications SET state='active',created_at=unixepoch(),message=? WHERE id=? AND state='resolved'").bind(row.product+' / '+row.title+': '+row.inventory+' remaining; target '+row.target+'.',old.id).run();
-    // New episode gets a separate immutable notification/outbox key.
-    await notify(env,key+':episode:'+Math.floor(+now/900000),'stock','Stock crossed the restock threshold',row.product+' / '+row.title+' needs factory restocking.',settings.email_reminder===1);
-   }
-  } else await env.DB.prepare("UPDATE finance_notifications SET state='resolved' WHERE dedupe=? AND state<>'resolved'").bind(key).run();
- }
+ for (const row of rows) await updateStockAlert(env,row,settings.email_reminder===1);
  const snapshot=(await env.DB.prepare(`SELECT a.account,b.balance,b.reported_on FROM (SELECT 'bank' account UNION ALL SELECT 'cash') a LEFT JOIN finance_balance_reports b ON b.id=(SELECT id FROM finance_balance_reports WHERE account=a.account ORDER BY reported_on DESC,created_at DESC LIMIT 1)`).all()).results;
  const complete=snapshot.every(b=>b.balance!==null&&b.reported_on===today),cash=snapshot.reduce((n,b)=>n+Number(b.balance||0),0);
  const liability=await env.DB.prepare(`SELECT -coalesce(sum(json_extract(p.value,'$.amount')),0) amount FROM finance_journals j,json_each(j.postings) p WHERE json_extract(p.value,'$.account') IN('loans','supplier_payable')`).first('amount');
@@ -38,7 +60,7 @@ export async function financeAlerts(env,now=new Date()) {
  }else if(complete)await env.DB.prepare("UPDATE finance_notifications SET state='resolved' WHERE dedupe='risk:reserve'").run();
  await deliverFinanceTelegram(env);
  if(emailReady(env)) {
-  const pending=(await env.DB.prepare(`SELECT o.*,n.title,n.message FROM finance_email_outbox o JOIN finance_notifications n ON n.id=o.notification_id WHERE o.state='pending' AND o.attempts<10 ORDER BY n.created_at LIMIT 10`).all()).results;
+  const pending=(await env.DB.prepare(`SELECT o.*,n.title,n.message FROM finance_email_outbox o JOIN finance_notifications n ON n.id=o.notification_id WHERE o.state='pending' AND o.attempts<10 AND (n.kind<>'stock' OR n.state='active') ORDER BY n.created_at LIMIT 10`).all()).results;
   for(const item of pending) {
    const sent=await sendEmail(env,{to:item.recipient,subject:'UNLISTED · '+item.title,text:item.message+'\n\nhttps://unlisted-shop.com/admin/finance',key:'finance-'+item.id});
    await env.DB.prepare("UPDATE finance_email_outbox SET state=?,attempts=attempts+1,sent_at=CASE WHEN ?=1 THEN unixepoch() ELSE NULL END WHERE id=?").bind(sent?'sent':'pending',Number(sent),item.id).run();

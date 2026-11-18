@@ -23,7 +23,6 @@ const { product } = Astro.props;
         <fieldset><legend>Selected size</legend>
           {product.variants.map((variant) => <label><input type="radio" name="variant" value={variant.id} required /> {variant.title}</label>)}
         </fieldset>
-        <p class="drop-size-note">Size chart coming soon. No measurements are available yet.</p>
         <label class="drop-consent"><input type="checkbox" name="consent" required /> I agree to receive email and WhatsApp updates about this pre-order.</label>
         <button class="btn" type="submit" disabled={!product.variants.length}>PRE-ORDER — NO PAYMENT REQUIRED</button>
         <p class="drop-form-note">Registration only. No checkout or payment.</p>

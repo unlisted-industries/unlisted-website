@@ -10,7 +10,9 @@ if (!product) Astro.response.status = 404;
 const variant = product?.variants.find((item) => item.id === Astro.url.searchParams.get('variant') && available(item))
   ?? product?.variants.find(available) ?? product?.variants[0];
 const hasCozyMatch = Boolean(product && Object.hasOwn(cozyMatch, product.handle));
-const chart = product?.handle === 'cozy-straight-leg-sweats-grey' ? '/theme/catalog/straight-leg-size-chart.webp' : mediaUrl(product?.size_chart_key);
+const straightLegSweats = product?.handle === 'cozy-straight-leg-sweats-grey';
+const modelHeight = straightLegSweats ? 176 : 178;
+const chart = straightLegSweats ? '/theme/catalog/straight-leg-size-chart.webp' : mediaUrl(product?.size_chart_key);
 ---
 <Store title={product?.title ?? 'Page not found'} noIndex={!product}>
   {!product ? <section class="page"><h1 class="page-title">PRODUCT NOT FOUND</h1><p><a href="/">Back to the collection</a></p></section>
@@ -23,7 +25,7 @@ const chart = product?.handle === 'cozy-straight-leg-sweats-grey' ? '/theme/cata
       <div class="unl-product-images" aria-label="Product photos">
         {product.images.map((image, index) => <div class="unl-product-image">
           <img src={mediaUrl(image.key)} alt={image.alt} width="1000" height="1333" loading={index ? 'lazy' : 'eager'} />
-          {hasCozyMatch && index === 1 && <span class="unl-model-info">MODEL: 178 CM · 67 KG · WEARS S/M</span>}
+          {hasCozyMatch && index === 1 && <span class="unl-model-info">MODEL: {modelHeight} CM · 67 KG · WEARS S/M</span>}
         </div>)}
       </div>
       <div class="unl-product-info">
@@ -40,11 +42,11 @@ const chart = product?.handle === 'cozy-straight-leg-sweats-grey' ? '/theme/cata
           <button type="submit" name="action" value="buy" class="btn unl-buy-now-button">BUY NOW</button>
         </form> : <button type="button" class="btn unl-buy-button" disabled>SOLD OUT</button>}
         <div class="unl-product-details">
-          <details><summary>Size chart</summary>
-            {chart ? <a href={chart} target="_blank" rel="noopener" class="unl-size-chart">
+          {chart && <details><summary>Size chart</summary>
+            <a href={chart} target="_blank" rel="noopener" class="unl-size-chart">
               <img src={chart} alt={product.title + ' size chart'} width="1536" height="1024" loading="lazy" />
-            </a> : <p>Size chart coming soon.</p>}
-          </details>
+            </a>
+          </details>}
           <details><summary>Description</summary><div class="unl-product-description" set:html={safeHtml(product.description)} /></details>
           <details><summary>Shipping &amp; Returns</summary><p>Delivery in Egypt usually takes 2–4 days after dispatch. Returns and size exchanges are available within 14 days for unworn, unused items in new condition. <a href="/pages/shipping">Read the full policy</a>.</p></details>
           <details><summary>Product care</summary><p>Cold wash, hang dry in a cool place, keep away from heat and direct sunlight, and do not bleach. See garment care label.</p></details>

@@ -344,6 +344,8 @@ test('storefront search, size chart and COZY matching item follow the supplied t
     db.prepare("INSERT INTO products (id, handle, title, status) VALUES ('hoodie', 'cozy-hoodie-grey', 'COZY HOODIE - GREY', 'active')"),
     db.prepare("INSERT INTO products (id, handle, title, status, size_chart_key) VALUES ('sweats', 'cozy-straight-leg-sweats-grey', 'COZY STRAIGHT LEG SWEATS - GREY', 'active', ?)").bind(chart),
     db.prepare("INSERT INTO variants (id, product_id, title, price, inventory) VALUES ('h', 'hoodie', 'S/M', 60000, 2), ('s', 'sweats', 'L', 55000, 2)"),
+    db.prepare("INSERT INTO media (key, content_type, original_name) VALUES ('shop/sweatpants-model.webp','image/webp','Model')"),
+    db.prepare("INSERT INTO product_images (product_id, media_key, position) VALUES ('sweats',?,0),('sweats','shop/sweatpants-model.webp',1)").bind(chart),
   ]);
   const web = browser();
   const search = await (await web('/search?q=cozy+hoodie')).text();
@@ -354,6 +356,8 @@ test('storefront search, size chart and COZY matching item follow the supplied t
   const product = await (await web(sweats)).text();
   assert.match(product, /unlisted-section-group-header-group/);
   assert.match(product, /\/theme\/catalog\/straight-leg-size-chart\.webp/);
+  assert.match(product, /MODEL: 176 CM/);
+  assert.doesNotMatch(product, /MODEL: 178 CM|id="SizeGuide"|Size chart coming soon/);
   assert.match(product, /COMPLETE THE LOOK/);
   assert.equal((await web('/api/cart', { action: 'add', variant: 's' })).headers.get('Location'), '/cart');
   assert.match(await (await web('/cart')).text(), /COMPLETE THE LOOK/);
@@ -1005,4 +1009,29 @@ test('finance phone test uses Telegram once and retains the same daily reminder 
  const outbox=await db.prepare("SELECT count(*) FROM finance_telegram_outbox o JOIN finance_notifications n ON n.id=o.notification_id WHERE n.kind='test' AND o.state='sent'").first('count(*)');assert.equal(outbox,1);
  await web('/admin/finance-action',{op:'test_reminder',confirmed:'yes'});
  assert.equal(telegram.filter(n=>n.text.includes('Finance notification delivery test')).length,texts.length);
+});
+
+test('scheduled finance sends the Cairo reminder once and re-arms stock alerts after recovery',async()=>{
+ const executor = await runtime.getWorker();
+ const tick = scheduledTime => executor.scheduled({scheduledTime:Date.parse(scheduledTime),cron:'*/15 * * * *'});
+ await db.prepare('UPDATE finance_settings SET daily_reminder=1,email_reminder=1 WHERE id=1').run();
+ await db.prepare("INSERT INTO finance_thresholds (variant_id,threshold,target) VALUES ('h',2,8)").run();
+ const refresh = () => db.prepare("SELECT id,state FROM finance_notifications WHERE kind='stock' AND dedupe LIKE 'stock:h:%'").all();
+ const before = mail.filter(message=>message.subject==='UNLISTED · Daily balance check').length;
+ await tick('2030-11-18T18:45:00Z');
+ assert.equal(mail.filter(message=>message.subject==='UNLISTED · Daily balance check').length,before);
+ assert.equal((await refresh()).results.filter(row=>row.state==='active').length,1);
+ await tick('2030-11-18T19:00:00Z');
+ await db.prepare("UPDATE finance_notifications SET state='read' WHERE kind='stock' AND dedupe LIKE 'stock:h:%'").run();
+ await tick('2030-11-18T19:15:00Z');
+ assert.equal(mail.filter(message=>message.subject==='UNLISTED · Daily balance check').length,before+1);
+ assert.equal((await refresh()).results.length,1);
+ await db.prepare("UPDATE variants SET inventory=8 WHERE id='h'").run();
+ await tick('2030-11-18T19:30:00Z');
+ assert.equal((await refresh()).results[0].state,'resolved');
+ await db.prepare("UPDATE variants SET inventory=2 WHERE id='h'").run();
+ await tick('2030-11-18T19:45:00Z');
+ const rows = (await refresh()).results;
+ assert.equal(rows.length,2);
+ assert.equal(rows.filter(row=>row.state==='active').length,1);
 });
