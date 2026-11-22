@@ -64,12 +64,12 @@ export async function importShopify(env, form) {
         json_extract(j.value, '$.created'), json_extract(j.value, '$.cancelled'), json_extract(j.value, '$.payment'),
         json_extract(j.value, '$.fulfillment'), json_extract(j.value, '$.amount'), json_extract(j.value, '$.currency'), json_extract(j.value, '$.items')
       FROM json_each(?) j WHERE ${permitted}
-      ON CONFLICT (source_id) DO UPDATE SET order_number = excluded.order_number, email = excluded.email,
+      ON CONFLICT (source_id) DO UPDATE SET order_number = excluded.order_number, email = coalesce(excluded.email,shopify_orders.email),
         created_at = excluded.created_at, cancelled_at = excluded.cancelled_at, payment = excluded.payment,
         fulfillment = excluded.fulfillment, amount = excluded.amount, currency = excluded.currency, line_items = excluded.line_items`, orders, transfer],
     [`INSERT INTO shopify_order_details (source_id, data)
       SELECT json_extract(j.value, '$.id'), json_extract(j.value, '$.details') FROM json_each(?) j WHERE ${permitted}
-      ON CONFLICT (source_id) DO UPDATE SET data = excluded.data`, orders, transfer],
+      ON CONFLICT (source_id) DO UPDATE SET data = json_patch(shopify_order_details.data,excluded.data)`, orders, transfer],
     [`INSERT OR IGNORE INTO customers (id, email, name)
       SELECT 'shopify:' || json_extract(j.value, '$.id'), lower(json_extract(j.value, '$.email')), json_extract(j.value, '$.name')
       FROM json_each(?) j WHERE json_extract(j.value, '$.email') IS NOT NULL AND ${permitted}`, customers, transfer],

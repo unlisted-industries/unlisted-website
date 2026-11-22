@@ -10,7 +10,7 @@ export const websiteSections = [
   { key: 'returns', label: 'Returns & exchanges' },
   { key: 'products', label: 'Products', children: [
     { key: 'collections', label: 'Collections' },
-    { key: 'inventory', label: 'Inventory' },
+    { key: 'inventory', label: 'Stock Management' },
   ] },
   { key: 'customers', label: 'Customers' },
   { key: 'discounts', label: 'Discounts' },

@@ -1,3 +1,4 @@
+import { ensureOperations } from './operations.js';
 import { ensureRma } from './rma.js';
 import { ensureFinance,journal } from './finance.js';
 import { reportingRange } from './reporting.js';
@@ -17,10 +18,11 @@ export async function snapshotCosts(db) {
  if(legacy.length)await db.batch(legacy.map(t=>journal(db,{source:'legacy:'+t.id,day:t.occurred_on,kind:t.kind,category:t.category,drop:t.drop_id,note:t.note,actor:'legacy import',postings:postingsFor(t.kind,t.account,t.amount)})));
 }
 export async function financeReport(db,url) {
- await ensureRma(db);await snapshotCosts(db);
- const range=reportingRange(url);
+ await ensureRma(db);await ensureOperations(db);await snapshotCosts(db);
+ const reportUrl=new URL(url);if(!reportUrl.searchParams.has('days')&&!reportUrl.searchParams.has('start'))reportUrl.searchParams.set('days','all');
+ const range=reportingRange(reportUrl);
  const [journals,balances,variants,drops,products,orders,items,returns,history,historyDetails,historicalCosts,attribution,links,prGifts,batches,notifications,settings,meta,audit,imports]=await Promise.all([
- all(db,'SELECT * FROM finance_journals ORDER BY occurred_on DESC,created_at DESC'),
+ all(db,`SELECT j.* FROM finance_journals j WHERE NOT EXISTS(SELECT 1 FROM ops_journal_scope s JOIN ops_projects p ON p.id=s.project_id WHERE s.journal_id=j.id AND upper(p.business)<>'UNLISTED') ORDER BY occurred_on DESC,created_at DESC`),
  all(db,`SELECT a.account,b.balance,b.reported_on,b.created_at FROM (SELECT 'bank' account UNION ALL SELECT 'cash') a LEFT JOIN finance_balance_reports b ON b.id=(SELECT id FROM finance_balance_reports WHERE account=a.account ORDER BY reported_on DESC,created_at DESC LIMIT 1)`),
  all(db,`SELECT v.*,p.title product,c.unit_cost,d.drop_id,t.threshold,t.target FROM variants v JOIN products p ON p.id=v.product_id LEFT JOIN finance_variant_costs c ON c.variant_id=v.id LEFT JOIN finance_drop_products d ON d.product_id=p.id LEFT JOIN finance_thresholds t ON t.variant_id=v.id WHERE p.status<>'archived' ORDER BY p.title,v.position`),
  all(db,'SELECT * FROM finance_drops ORDER BY created_at DESC'),all(db,"SELECT id,title FROM products WHERE status<>'archived' ORDER BY title"),
@@ -188,7 +190,7 @@ export async function financeReport(db,url) {
   return {id,name:ms[0]?.campaign_name||id,spend,purchases,platformRevenue,collected,revenue,cogs,prCost,linkedFees,roas:spend?(collected-linkedFees)/spend:null,platformRoas:spend?platformRevenue/spend:null,cpa:purchases?spend/purchases:null,profit,roi:investment>0?profit/investment:null,breakEvenRoas:contribution>0?revenue/contribution:null};
  });
  const productReports=products.map(p=>{const es=current.events.filter(e=>e.product===p.id),revenue=sum(es.filter(e=>e.type==='product_revenue').map(e=>e.amount)),cogs=sum(es.filter(e=>e.type==='cogs').map(e=>e.amount));return {...p,revenue,cogs,contribution:revenue-cogs};});
- const trend=[];for(let offset=0;offset<range.days;offset++){const date=new Date(range.current.startDate+'T12:00:00Z');date.setUTCDate(date.getUTCDate()+offset);const day=date.toISOString().slice(0,10);trend.push({day,revenue:sum(events.filter(e=>e.day===day&&e.type==='revenue').map(e=>e.amount)),expenses:sum(events.filter(e=>e.day===day&&['expense','pr','cogs'].includes(e.type)).map(e=>e.amount))+sum(meta.filter(m=>m.day===day).map(m=>m.spend))});}
+ const trend=[];for(let offset=0;offset<Math.min(range.days,366);offset++){const date=new Date(range.current.endDate+'T12:00:00Z');date.setUTCDate(date.getUTCDate()-Math.min(range.days,366)+1+offset);const day=date.toISOString().slice(0,10);trend.push({day,revenue:sum(events.filter(e=>e.day===day&&e.type==='revenue').map(e=>e.amount)),expenses:sum(events.filter(e=>e.day===day&&['expense','pr','cogs'].includes(e.type)).map(e=>e.amount))+sum(meta.filter(m=>m.day===day).map(m=>m.spend))});}
  const safeAdvertisingBudget=safeSpending===null||!current.profitReliable?null:Math.max(0,Math.min(safeSpending,current.revenue-current.cogs-(current.expenses-current.advertising)-current.pr));
  return {...current,safeAdvertisingBudget,range,previous,journals:journals.slice(0,40),balances,variants,drops,products,prGifts,batches,notifications,settings,meta,audit,imports,dropReports,productReports,campaigns,trend,missingCosts,warnings:[...warnings],cashReported:reported,cashEstimated:latestCash,cashComplete,staleBalances,liabilities:liability,customerLiability,uncollected,clearing,inventoryValue,remainingStock,safeSpending,runway,dataScore,recommendations,lowStock,ledger};
 }

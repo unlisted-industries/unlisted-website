@@ -326,6 +326,21 @@ export async function dashboard(db, period) {
     ["SELECT count(*) AS count FROM orders WHERE status = 'new' AND (payment_method = 'cod' OR payment_status = 'paid')"],
     ["SELECT (SELECT count(*) FROM order_returns WHERE state='requested')+(SELECT count(*) FROM rma_cases WHERE state='requested') AS count"],
   ]);
+  const history = (await db.prepare(`SELECT o.*,d.data FROM shopify_orders o LEFT JOIN shopify_order_details d ON d.source_id=o.source_id WHERE o.currency='EGP' AND NOT EXISTS(SELECT 1 FROM finance_order_links l WHERE l.shopify_source_id=o.source_id)`).all()).results;
+  const historical = (w) => {
+    const result={sales:0,gross:0,revenue:0,records:0};
+    for(const o of history){if(o.created_at<w.start||o.created_at>=w.end)continue;
+      let raw={};try{raw=JSON.parse(o.data||'{}');}catch{}
+      const h=raw.header||raw;if(raw.test===true||h.Test==='true')continue;result.records++;
+      if(o.cancelled_at)continue;
+      const amount=Math.round(Number(o.amount)*100),refund=Math.round(Number(h['Refunded Amount']||0)*100);
+      if(!Number.isSafeInteger(amount)||!Number.isSafeInteger(refund))continue;
+      const paid=['paid','partially_refunded','refunded'].includes(o.payment.toLowerCase());
+      if(o.payment.toLowerCase()==='refunded'&&!refund)continue;
+      result.sales++;result.gross+=Math.max(0,amount-refund);if(paid)result.revenue+=Math.max(0,amount-refund);
+    }return result;
+  };
+  for(const [index,w] of [[0,range.current],[4,range.previous??range.current]]){const h=historical(w);for(const k of ['sales','gross','revenue'])results[index].results[0][k]+=h[k];}
   return {
     ...results[0].results[0], visitors: results[1].results[0].visitors, converted: results[2].results[0].converted,
     products: results[3].results, previous: range.previous ? {

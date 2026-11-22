@@ -1,0 +1,12 @@
+<section class="fin-panel" id="cpa-planner"><h2>What can I spend per purchase?</h2><p class="fin-muted">Simulation only · EGP · One piece per order. Include every cost once. These inputs do not change stock, prices or accounts.</p>
+<form data-cpa-planner class="fin-form">
+ <label>Sale price<input name="price" type="number" min="0" max="1000000" step=".01" required/></label>
+ <label>Cost per piece<input name="unitCost" type="number" min="0" max="1000000" step=".01" required/></label>
+ <label>Selling fees per order<input name="fees" type="number" min="0" max="1000000" step=".01" value="0" required/></label>
+ <label>Expected purchases<input name="purchases" type="number" min="0" max="1000000" step="1" required/></label>
+ <label>Other costs for this scenario<input name="fixed" type="number" min="0" max="1000000" step=".01" value="0" required/></label>
+ <label>CPA · cost per purchase<input name="cpa" type="number" min="0" max="1000000" step=".01" value="0" required/></label>
+ <label class="fin-full">Slide CPA <input data-cpa-range type="range" min="0" max="1000" step="1" value="0" aria-label="CPA slider"/></label>
+</form><div data-cpa-results role="status" aria-live="polite">Enter price, cost and expected purchases.</div>
+<p class="fin-muted">Profit excludes costs you have not entered. Sellout assumptions are not a safe cash budget. Compare any proposed prices below by changing Sale price.</p></section>
+<script is:inline type="module" src="/admin/cpa.js"></script>

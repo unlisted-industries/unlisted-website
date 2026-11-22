@@ -15,7 +15,8 @@ function variantPath(row) {
   return '/admin/products?' + query + '#variant-' + encodeURIComponent(row.id);
 }
 ---
-<div class="admin-heading"><div><p class="overline">CATALOG</p><h1>Inventory</h1><p>Review stock on hand by variant. Select a product to update its count.</p></div></div>
+<div class="admin-heading"><div><p class="overline">CATALOG</p><h1>Stock Management</h1><p>Review stock on hand by variant. Select a product to update its count.</p></div></div>
+<p><a class="button primary" href="/admin/operations#stock">Stock movements, receipts & business batches</a></p>
 <section class="panel">
   <form method="get" class="inline-form"><label>Search <input name="q" value={q} maxlength="100" placeholder="Product, variant, or SKU" /></label><button class="button">Search</button></form>
   {rows.length ? <div class="table-wrap"><table>
