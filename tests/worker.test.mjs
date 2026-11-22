@@ -1035,3 +1035,42 @@ test('scheduled finance sends the Cairo reminder once and re-arms stock alerts a
  assert.equal(rows.length,2);
  assert.equal(rows.filter(row=>row.state==='active').length,1);
 });
+
+test('project facts are private, idempotent and never create payments or unreceived stock',async()=>{
+ const paidBefore=await db.prepare('SELECT count(*) n FROM finance_journals').first('n');
+ const inventoryBefore=await db.prepare('SELECT sum(inventory) n FROM variants').first('n');
+ const b={version:1,projects:[{id:'fixture-project',name:'Fixture batch',business:'SEPARATE TEST BUSINESS',state:'production',note:'Reported facts; no payment dates supplied.'}],costs:[{id:'fixture-paid',project_id:'fixture-project',description:'Fabric',amount:12345,state:'paid',note:''},{id:'fixture-estimate',project_id:'fixture-project',description:'Estimated factory',amount:4500,state:'estimate',note:''}],products:[{id:'fixture-production',project_id:'fixture-project',name:'Test clothes',product_id:null,planned:20,received:1,personal:0,samples:1,price:null,note:'Expected quantities are not stock.'}]};
+ const payload={op:'project_import',bundle:JSON.stringify(b),confirmed:'yes'};
+ const outsider=browser();assert.equal((await outsider('/admin/operations',payload)).status,303);
+ for(let n=0;n<2;n++)assert.equal((await admin('/admin/operations',payload)).headers.get('Location'),'/admin/operations?saved=1');
+ assert.equal(await db.prepare("SELECT count(*) n FROM ops_costs WHERE project_id='fixture-project'").first('n'),2);
+ assert.equal(await db.prepare('SELECT count(*) n FROM finance_journals').first('n'),paidBefore);
+ assert.equal(await db.prepare('SELECT sum(inventory) n FROM variants').first('n'),inventoryBefore);
+ b.costs[0].amount++;assert.match((await admin('/admin/operations',{...payload,bundle:JSON.stringify(b)})).headers.get('Location'),/error=/);
+ const page=await(await admin('/admin/operations?project=fixture-project')).text();assert.match(page,/Separate|SEPARATE TEST BUSINESS/);assert.match(page,/Estimates/);
+ assert.equal((await admin('/admin/operations',payload,{Origin:'https://bad.example'})).status,403);
+});
+
+test('reason stock adjustments reject stale baselines and duplicate submissions atomically',async()=>{
+ await db.prepare("UPDATE variants SET inventory=100 WHERE id='h'").run();
+ const form={op:'stock_adjust',request_id:crypto.randomUUID().replaceAll('-',''),variant_id:'h',before:'100',quantity:'2',reason:'personal',note:'Fixture owner withdrawal',confirmed:'yes'};
+ assert.equal((await admin('/admin/operations',form)).headers.get('Location'),'/admin/operations?saved=1');
+ await admin('/admin/operations',form);assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id='h'").first('inventory'),98);
+ const stale=await admin('/admin/operations',{...form,request_id:crypto.randomUUID().replaceAll('-','')});assert.match(stale.headers.get('Location'),/error=/);
+ assert.equal(await db.prepare("SELECT count(*) n FROM ops_movements WHERE variant_id='h'").first('n'),1);
+ const forms=[{...form,before:'98',request_id:crypto.randomUUID().replaceAll('-','')},{...form,before:'98',request_id:crypto.randomUUID().replaceAll('-','')}];
+ await Promise.all(forms.map(f=>admin('/admin/operations',f)));assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id='h'").first('inventory'),96);
+});
+
+test('accountant matches reported costs once and keeps separate business payments out of UNLISTED reports',async()=>{
+ const day=new Date().toISOString().slice(0,10),file=new FormData();
+ file.set('op','extract');file.set('text',`date,amount,kind,category,account,note\n${day},123.45,inventory_purchase,raw materials,bank,Fixture already reported fabric`);
+ const response=await admin('/admin/finance-action',file),id=new URL(origin+response.headers.get('Location')).searchParams.get('import');
+ assert.ok(id);
+ const form={op:'confirm_import',import_id:id,include_0:'on',date_0:day,amount_0:'123.45',kind_0:'inventory_purchase',category_0:'raw materials',account_0:'bank',note_0:'Fixture already reported fabric',project_0:'fixture-project',match_0:'fixture-paid',confirmed:'yes'};
+ await admin('/admin/finance-action',form);await admin('/admin/finance-action',form);
+ assert.equal(await db.prepare("SELECT count(*) n FROM ops_costs WHERE project_id='fixture-project'").first('n'),2);
+ const journal=await db.prepare("SELECT journal_id FROM ops_costs WHERE id='fixture-paid'").first('journal_id');assert.ok(journal);
+ assert.equal(await db.prepare('SELECT project_id FROM ops_journal_scope WHERE journal_id=?').bind(journal).first('project_id'),'fixture-project');
+ const page=await(await admin('/admin/finance?tab=cash&days=all')).text();assert.doesNotMatch(page,/Fixture already reported fabric/);
+});
