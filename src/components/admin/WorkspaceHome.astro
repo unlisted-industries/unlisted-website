@@ -14,7 +14,8 @@ import { checkoutReady } from '../../lib/checkout.js';
 import { mediaUrl, money } from '../../lib/content.js';
 import { cardReady } from '../../lib/paymob.js';
 
-const range = reportingRange(Astro.url);
+const reportUrl = new URL(Astro.url);if(!reportUrl.searchParams.has('days')&&!reportUrl.searchParams.has('start'))reportUrl.searchParams.set('days','all');
+const range = reportingRange(reportUrl);
 const [metrics, settings, archived] = await Promise.all([
   dashboard(env.DB, range), getSettings(Astro, env.DB),
   env.DB.prepare('SELECT count(*) AS count FROM shopify_orders').first('count'),
@@ -30,7 +31,6 @@ const stats = [
   ['Orders', metrics.sales, metrics.sales, metrics.previous?.sales, false],
   ['Conversion', conversion === null ? '—' : conversion.toFixed(1) + '%', conversion, previousConversion, true],
 ];
-const reportUrl = new URL(Astro.url);
 reportUrl.pathname = '/admin/analytics';
 const tasks = [
   ['orders', 'Review orders', metrics.newOrders, '/admin/orders'],
@@ -61,7 +61,7 @@ const poster = mediaUrl(settings.hero_poster);
         <dl class="home-stats">{stats.map(([label, value, current, previous, points]) => <div><dt>{label}</dt><dd>{value}</dd>
           {range.previous && <MetricChange current={current} previous={previous} points={points} />}
         </div>)}</dl>
-        <p class="metrics-scope">Orders and visits recorded on this storefront. Comparisons use the dates above.</p>
+        <p class="metrics-scope">Order totals include imported history without linked duplicates. Visitors and conversion use this storefront only. Bank settlements and fees need reconciliation.</p>
       </section>
       <section class="panel home-next"><h2>Next up</h2><nav class="home-actions" aria-label="Store actions">
         {tasks.map(([icon, label, count, link]) => <a href={link}><Icon name={icon} />{label}<span>{count}</span></a>)}
