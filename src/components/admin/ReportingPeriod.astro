@@ -10,6 +10,7 @@ const options = [['previous', 'Previous period'], ['year', 'Previous year'], ['c
 <div class="reporting-period">
   <div class="report-toolbar">
     <nav class="report-presets" aria-label="Reporting period">
+      <a href={periodLink(Astro.url,{days:'all',compare:'none'})} aria-current={range.allTime?'page':undefined}>All time</a>
       {[1, 7, 30, 90].map((days) => <a href={periodLink(Astro.url, { days, ...compareValues })}
         aria-current={!range.custom && range.days === days ? 'page' : undefined}>{days === 1 ? 'Today' : days + ' days'}</a>)}
     </nav>
