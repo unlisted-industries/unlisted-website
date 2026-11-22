@@ -55,11 +55,12 @@ export function reportingRange(url, now = new Date()) {
   const today = cairoDate.format(now);
   const requestedDays = Number(url.searchParams.get('days'));
   const preset = reportingPeriods.includes(requestedDays) ? requestedDays : 30;
-  let start = addCalendarDays(today, 1 - preset);
+  const allTime = url.searchParams.get('days') === 'all';
+  let start = allTime ? '2000-01-01' : addCalendarDays(today, 1 - preset);
   let end = today;
   let custom = false;
   let error = '';
-  if (url.searchParams.has('start') || url.searchParams.has('end')) {
+  if (!allTime && (url.searchParams.has('start') || url.searchParams.has('end'))) {
     const requestedStart = url.searchParams.get('start');
     const requestedEnd = url.searchParams.get('end');
     if (allowedRange(requestedStart, requestedEnd, today)) {
@@ -69,7 +70,7 @@ export function reportingRange(url, now = new Date()) {
     } else error = 'Choose a valid date range of up to 366 days, ending today or earlier.';
   }
   const current = window(start, end);
-  let comparison = url.searchParams.get('compare') ?? 'previous';
+  let comparison = allTime ? 'none' : url.searchParams.get('compare') ?? 'previous';
   if (!['previous', 'year', 'custom', 'none'].includes(comparison)) comparison = 'previous';
   let previous = null;
   if (comparison === 'custom') {
@@ -84,8 +85,8 @@ export function reportingRange(url, now = new Date()) {
   if (comparison === 'previous') previous = window(addCalendarDays(start, -current.days), addCalendarDays(start, -1));
   if (comparison === 'year') previous = window(previousYear(start), previousYear(end));
   return {
-    today, current, previous, comparison, custom, error, days: current.days,
-    label: custom ? dateRangeLabel(current) : preset === 1 ? 'Today' : 'Last ' + preset + ' days',
+    today, current, previous, comparison, custom, allTime, error, days: current.days,
+    label: allTime ? 'All time' : custom ? dateRangeLabel(current) : preset === 1 ? 'Today' : 'Last ' + preset + ' days',
     previousLabel: previous ? dateRangeLabel(previous) : '',
   };
 }
