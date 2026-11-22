@@ -19,6 +19,7 @@ const spend=f.campaigns.reduce((n,c)=>n+c.spend,0);
 const sent=await env.DB.prepare("SELECT max(sent_at) FROM finance_telegram_outbox WHERE state='sent'").first('max(sent_at)');
 ---
 <div class="finance-root simple-finance">
+<p><a class="fin-button secondary" href="/admin/operations">Stocks, businesses & CPA planner</a> <a href="/admin/inventory">Stock management</a></p>
 <header class="fin-header"><div><p class="fin-eyebrow">UNLISTED / FINANCE · EGP</p><h1>Know what your stock can make.</h1><p>Name your stock. Add its cost and price. See your numbers.</p></div><a class="fin-button" href="#add-stock">+ Add stock</a></header>
 {Astro.url.searchParams.get('error')&&<p class="fin-error" role="alert">{Astro.url.searchParams.get('error')}</p>}
 {Astro.url.searchParams.has('saved')&&<p class="fin-alert" role="status">Saved. Your numbers are up to date.</p>}
