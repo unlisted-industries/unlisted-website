@@ -8,6 +8,13 @@ function testCredentials(env) {
     /^(?:egy(?:pt)?_)?pk_?test[_-]/i.test(env.PAYMOB_PUBLIC_KEY ?? '');
 }
 
+export function paymobMode(env) {
+  if (testCredentials(env)) return 'Test mode';
+  if (/^(?:egy(?:pt)?_)?sk_?live[_-]/i.test(env.PAYMOB_SECRET_KEY ?? '') &&
+      /^(?:egy(?:pt)?_)?pk_?live[_-]/i.test(env.PAYMOB_PUBLIC_KEY ?? '')) return 'Live keys configured';
+  return 'Mode unverified';
+}
+
 function integrationSetting(env) {
   return testCredentials(env) && env.PAYMOB_TEST_INTEGRATION_IDS !== undefined
     ? 'PAYMOB_TEST_INTEGRATION_IDS' : 'PAYMOB_INTEGRATION_IDS';
