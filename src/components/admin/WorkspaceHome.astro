@@ -1,48 +1,54 @@
 ---
 import { env } from 'cloudflare:workers';
 import Icon from './Icon.astro';
-import ReportingPeriod from './ReportingPeriod.astro';
 import { dashboard } from '../../lib/admin.js';
+import { collectionSales } from '../../lib/collection-sales.js';
 import { reportingRange } from '../../lib/reporting.js';
 import { liveVisitors } from '../../lib/live-visitors.js';
 import LiveVisitors from './LiveVisitors.astro';
-import MetricChange from './MetricChange.astro';
 import { workspaceSections } from '../../lib/admin-navigation.js';
 import { emailReady } from '../../lib/auth.js';
 import { getSettings } from '../../lib/catalog.js';
 import { checkoutReady } from '../../lib/checkout.js';
 import { mediaUrl, money } from '../../lib/content.js';
-import { cardReady } from '../../lib/paymob.js';
+import { cardReady, paymobMode, walletReady } from '../../lib/paymob.js';
+import { telegramReady } from '../../lib/order-notifications.js';
+import { ensureFinance } from '../../lib/finance-schema.js';
 
-const reportUrl = new URL(Astro.url);if(!reportUrl.searchParams.has('days')&&!reportUrl.searchParams.has('start'))reportUrl.searchParams.set('days','all');
+const reportUrl = new URL('/admin/analytics?days=all', Astro.url);
 const range = reportingRange(reportUrl);
-const [metrics, settings, archived] = await Promise.all([
+await ensureFinance(env.DB);
+const [metrics, settings, archived, collections] = await Promise.all([
   dashboard(env.DB, range), getSettings(Astro, env.DB),
   env.DB.prepare('SELECT count(*) AS count FROM shopify_orders').first('count'),
+  collectionSales(env.DB),
 ]);
 const activity = await liveVisitors(env.DB, settings.analytics_enabled).catch(() => ({ enabled: Boolean(settings.analytics_enabled), available: false, visitors: 0, countries: [], unknown: 0 }));
 const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
 const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
 const conversion = metrics.visitors ? 100 * metrics.converted / metrics.visitors : null;
-const previousConversion = metrics.previous?.visitors ? 100 * metrics.previous.converted / metrics.previous.visitors : null;
 const stats = [
-  ['Visitors', metrics.visitors, metrics.visitors, metrics.previous?.visitors, false],
-  ['Paid revenue', money(metrics.revenue, true), metrics.revenue, metrics.previous?.revenue, false],
-  ['Orders', metrics.sales, metrics.sales, metrics.previous?.sales, false],
-  ['Conversion', conversion === null ? '—' : conversion.toFixed(1) + '%', conversion, previousConversion, true],
+  ['Paid revenue', money(metrics.revenue, true)],
+  ['Orders', metrics.sales],
+  ['Visitors', metrics.visitors],
+  ['Conversion', conversion === null ? '—' : conversion.toFixed(1) + '%'],
 ];
-reportUrl.pathname = '/admin/analytics';
 const tasks = [
   ['orders', 'Review orders', metrics.newOrders, '/admin/orders'],
   ['returns', 'Review return requests', metrics.newReturns, '/admin/returns'],
   ['products', 'Verify stock counts', metrics.unknownStock, '/admin/inventory'],
 ];
 const paymobConfigured = cardReady(env);
+const mode = paymobMode(env);
+const alertConfigured = telegramReady(env);
 const emailConfigured = emailReady(env);
 const checkoutOpen = checkoutReady(env, settings);
 const readiness = [
   ['Historical orders', archived > 0 ? archived + ' imported' : 'Awaiting import', '/admin/orders', archived > 0],
-  ['Paymob', paymobConfigured ? 'Credentials configured' : 'Credentials pending', '/admin/settings#payments', paymobConfigured],
+  ['Paymob card', !paymobConfigured ? 'Credentials pending' : !settings.card_enabled ? 'Off' : mode, '/admin/settings#payments', paymobConfigured && Boolean(settings.card_enabled) && mode === 'Live keys configured'],
+  ['Paymob wallet', settings.card_enabled && walletReady(env) ? mode : 'Unavailable', '/admin/settings#payments', Boolean(settings.card_enabled) && walletReady(env) && mode === 'Live keys configured'],
+  ['Cash on delivery', checkoutOpen && settings.cod_enabled ? 'Available' : 'Off', '/admin/settings#payments', checkoutOpen && Boolean(settings.cod_enabled)],
+  ['Telegram order alerts', alertConfigured ? 'Configured' : 'Setup needed', '/admin/finance#phone-alerts', alertConfigured],
   ['Order and account email', emailConfigured ? 'Configured' : 'Credentials pending', '/admin/settings#payments', emailConfigured],
   ['Store checkout', checkoutOpen ? 'Open' : 'Closed', '/admin/settings#payments', checkoutOpen],
 ];
@@ -53,14 +59,25 @@ const poster = mediaUrl(settings.hero_poster);
     <div><p class="overline">YOUR STORE, AT A GLANCE</p><h1>{greeting}, UNLISTED.</h1><p>See what is happening, and how your store is growing.</p></div>
     <a class="button" href="/" target="_blank" rel="noopener">Open storefront ↗</a>
   </header>
-  <ReportingPeriod range={range} />
+  <section class="panel collection-sales" aria-labelledby="collection-sales-title">
+    <header class="performance-heading"><div><p class="overline">ALL TIME</p><h2 id="collection-sales-title">Sales by collection</h2></div><a href="/admin/orders">View orders <Icon name="arrow" /></a></header>
+    <div class="collection-grid">
+      {collections.map(group => <article class="collection-tile">
+        <h3>{group.name}</h3>
+        <strong>{money(group.value, true)}</strong>
+        <p>{group.quantity} items · {group.orders} orders</p>
+        {group.missing > 0 && <small>{group.missing} order lines need review.</small>}
+        {group.project && <a href={'/admin/operations?project=' + group.project}>{group.project === 'stock-2' ? 'Stock 2 records' : 'Stock 3 records'}</a>}
+      </article>)}
+      <article class="collection-tile"><h3>Senior T-shirts</h3><p>Separate business · sales unrecorded</p><a href="/admin/operations?project=senior-shirts">Senior T-shirt records</a></article>
+    </div>
+    <p class="metrics-scope">Product value excludes shipping. Shopify figures use net product sales. Website figures show the merchandise value at checkout after discounts. COZY batch attribution is still under review.</p>
+  </section>
   <div class="home-dashboard">
     <div class="home-performance">
       <section class="panel home-summary" aria-label="Store performance">
         <header class="performance-heading"><div><p class="overline">ONLINE STORE</p><h2>Performance</h2></div><a href={reportUrl.pathname + reportUrl.search}>View report <Icon name="arrow" /></a></header>
-        <dl class="home-stats">{stats.map(([label, value, current, previous, points]) => <div><dt>{label}</dt><dd>{value}</dd>
-          {range.previous && <MetricChange current={current} previous={previous} points={points} />}
-        </div>)}</dl>
+        <dl class="home-stats">{stats.map(([label, value]) => <div><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
         <p class="metrics-scope">Order totals include imported history without linked duplicates. Visitors and conversion use this storefront only. Bank settlements and fees need reconciliation.</p>
       </section>
       <section class="panel home-next"><h2>Next up</h2><nav class="home-actions" aria-label="Store actions">
@@ -92,3 +109,12 @@ const poster = mediaUrl(settings.hero_poster);
     </a>)}
   </nav>
 </div>
+<style>
+  .collection-sales { margin-bottom: 18px; }
+  .collection-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; }
+  .collection-tile { padding: 14px; border: 1px solid #e8ede8; border-radius: 11px; background: #fbfcfa; }
+  .collection-tile h3 { margin: 0 0 6px; font-size: 14px; }
+  .collection-tile strong { font-size: 23px; font-variant-numeric: tabular-nums; }
+  .collection-tile p { margin: 5px 0; }
+  .collection-tile small, .collection-tile a { display: block; margin-top: 8px; font-size: 12px; }
+</style>
