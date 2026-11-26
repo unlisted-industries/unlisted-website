@@ -28,8 +28,14 @@ export const onRequest = defineMiddleware(async (context, next) => {
   headers.set('Permissions-Policy', `camera=(), microphone=${url.pathname === '/admin/finance' ? '(self)' : '()'}, geolocation=()`);
   if (headers.get('Content-Type')?.includes('text/html')) {
     if (Date.now() < saleEndsAt && !protectedPaths.test(url.pathname)) headers.set('Cache-Control','no-store');
-    headers.set('Content-Security-Policy',
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' https://accept.paymob.com https://eg.checkout.paymob.com; object-src 'none'");
+    const basePolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' https://accept.paymob.com https://eg.checkout.paymob.com; object-src 'none'";
+    // Permit the exact Meta bootstrap in Store.astro and Meta's pixel endpoints.
+    // Admin and API responses retain the original policy.
+    const pixelPolicy = basePolicy
+      .replace("script-src 'self'", "script-src 'self' 'sha256-BGrr6sjeOj1e2ZfLeuJsLM/kDy1d/Xoh9/l0M1Ajatw=' https://connect.facebook.net")
+      .replace("img-src 'self' data:", "img-src 'self' data: https://www.facebook.com")
+      + "; connect-src 'self' https://www.facebook.com https://connect.facebook.net";
+    headers.set('Content-Security-Policy', /^\/(?:admin|api)(?:\/|$)/.test(url.pathname) ? basePolicy : pixelPolicy);
   }
   if (protectedPaths.test(url.pathname)) headers.set('Cache-Control', 'private, no-store');
   if (url.hostname.endsWith('.workers.dev') || protectedPaths.test(url.pathname)) {
