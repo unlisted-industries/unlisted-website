@@ -3,11 +3,12 @@ import { env } from 'cloudflare:workers';
 import Store from '../../layouts/Store.astro';
 import Notice from '../../components/Notice.astro';
 import OrderReturns from '../../components/OrderReturns.astro';
-import { orderLines, visibleOrder } from '../../lib/checkout.js';
+import { orderLines, orderSets, visibleOrder } from '../../lib/checkout.js';
 import { displayDate, money } from '../../lib/content.js';
 const order = await visibleOrder(env, Astro, Astro.params.id);
 const method = order ? await env.DB.prepare('SELECT method FROM order_payment_choices WHERE order_id=?').bind(order.id).first('method') ?? order.payment_method : '';
 const lines = order ? await orderLines(env.DB, order.id) : [];
+const sets = order ? await orderSets(env.DB,order.id) : [];
 if (!order) Astro.response.status = 404;
 ---
 <Store title="Order status" noIndex>
@@ -21,6 +22,7 @@ if (!order) Astro.response.status = 404;
       {order.payment_status === 'paid' && <p>Payment received.</p>}
       {order.payment_status === 'unpaid' && order.payment_method === 'cod' && order.status !== 'cancelled' && <p>Payment is due on delivery.</p>}
       {order.tracking && <p>Tracking reference {order.tracking}</p>}
+      {sets.map(set=><p>{set.quantity} × COZY FULL SET · Hoodie {set.hoodie_size} · Sweatpants {set.sweats_size}</p>)}
       <ul class="account-orders">{lines.map((line) => <li>{line.quantity} × {line.product_title} · {line.variant_title} · {money(line.price * line.quantity)}</li>)}</ul>
       <dl class="store-totals">
         <div><dt>Subtotal</dt><dd>{money(order.subtotal)}</dd></div>

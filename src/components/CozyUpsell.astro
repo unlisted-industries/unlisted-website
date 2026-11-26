@@ -1,4 +1,5 @@
 ---
+import { offerPrice } from '../lib/offers.js';
 import { env } from 'cloudflare:workers';
 import { cartProductHandles } from '../lib/cart.js';
 import { available, cozyMatch, getProduct } from '../lib/catalog.js';
@@ -21,7 +22,7 @@ const picker = 'UnlCozyVariant-' + context;
     <div class="unl-cozy-upsell-details">
       <p class="unl-cozy-upsell-description">The matching piece for your everyday set.</p>
       <a class="unl-cozy-upsell-title" href={'/products/' + related.handle}>{related.title}</a>
-      <p class="unl-cozy-upsell-price">{money(variants[0].price)}</p>
+      <p class="unl-cozy-upsell-price">{money(offerPrice(related.handle,variants[0].price))}</p>
       <form class="unl-cozy-upsell-controls" method="post" action="/api/cart">
         {productHandle && <input type="hidden" name="return_product" value={productHandle} />}
         <label class="visually-hidden" for={picker}>Select size for {related.title}</label>

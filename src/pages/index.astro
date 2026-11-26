@@ -2,6 +2,8 @@
 import { env } from 'cloudflare:workers';
 import Store from '../layouts/Store.astro';
 import ProductCard from '../components/ProductCard.astro';
+import CozySetVisual from '../components/CozySetVisual.astro';
+import { hoodieHandle, sweatsHandle } from '../lib/offers.js';
 import Preorder from '../components/Preorder.astro';
 import { getSettings, featuredProducts, getProduct, getCollection, available } from '../lib/catalog.js';
 import { mediaUrl } from '../lib/content.js';
@@ -12,9 +14,11 @@ const group = Astro.url.searchParams.get('collection');
 const store = await getSettings(Astro, env.DB);
 const collection = group ? await getCollection(env.DB, group) : null;
 const products = preorder ? [] : collection?.products ?? await featuredProducts(env.DB);
+const offerNow = Date.now();
+const [hoodie, sweats] = preorder || group ? [] : await Promise.all([getProduct(env.DB,hoodieHandle),getProduct(env.DB,sweatsHandle)]);
 const soldOut = group === 't-shirts' && !products.some((product) => product.variants.some(available));
 ---
-<Store title={preorder?.title}>
+<Store title={preorder?.title} {offerNow}>
   {preorder ? <Preorder product={preorder} /> : <>
     {store.hero_mobile && <section class="drop-film" aria-label="UNLISTED collection film">
       <video autoplay muted loop playsinline preload="metadata" poster={mediaUrl(store.hero_poster)} aria-label="UNLISTED cozy grey collection film">
@@ -25,7 +29,15 @@ const soldOut = group === 't-shirts' && !products.some((product) => product.vari
     <section class="drop-products" id="DropProducts">
       <h1>{collection ? collection.title.toUpperCase() : store.home_heading}</h1>
       {soldOut ? <p class="drop-sold-out">Our T-shirts are sold out. Their collection will return here when available.</p>
-        : <div class="drop-grid">{products.map((product, index) => <ProductCard product={product} eager={index === 0} />)}</div>}
+        : <div class="drop-grid">{products.map((product, index) => <ProductCard product={product} eager={index === 0} {offerNow} />)}</div>}
     </section>
+    {hoodie && sweats && !hoodie.preorder && !sweats.preorder && <section class="cozy-home-offer" id="offers" aria-label="Offers">
+      <article class="cozy-set">
+        <CozySetVisual {hoodie} {sweats} />
+        <div class="cozy-set-copy"><h2>COZY FULL SET</h2><p>Grey hoodie + grey straight leg sweatpants. Choose your size for each piece.</p>
+          <div class="cozy-set-form"><a class="btn" href="/offers#cozy-set">SHOP OFFERS</a></div>
+        </div>
+      </article>
+    </section>}
   </>}
 </Store>

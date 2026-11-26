@@ -1,0 +1,8 @@
+---
+import { money } from '../lib/content.js';
+const { original, current, label = 'Black Friday' } = Astro.props;
+---
+<span class="offer-price-tag" aria-label={label + ': ' + money(current,true) + ', originally ' + money(original,true)}>
+  <span class="offer-price-label">{label}</span>
+  <span class="offer-price-values"><del>{money(original,true)}</del><strong>{money(current,true)}</strong></span>
+</span>

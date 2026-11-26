@@ -1,0 +1,40 @@
+---
+import { env } from 'cloudflare:workers';
+import Store from '../layouts/Store.astro';
+import Notice from '../components/Notice.astro';
+import ProductCard from '../components/ProductCard.astro';
+import CozySetVisual from '../components/CozySetVisual.astro';
+import { getProduct } from '../lib/catalog.js';
+import { blackFridayActive, hoodieHandle, sweatsHandle, salePrice, setPrice } from '../lib/offers.js';
+import { money } from '../lib/content.js';
+const now = Date.now();
+const sale = blackFridayActive(now);
+const [hoodie, sweats] = await Promise.all([getProduct(env.DB, hoodieHandle), getProduct(env.DB, sweatsHandle)]);
+const products = [hoodie,sweats].filter(product=>product && !product.preorder);
+const hoodieSizes = hoodie?.variants.filter(v=>v.inventory>0) ?? [];
+const sweatsSizes = sweats?.variants.filter(v=>v.inventory>0) ?? [];
+---
+<Store title="Offers" offerNow={now}>
+  <section class="drop-products cozy-offers">
+    <h1>OFFERS</h1>
+    <Notice />
+    {products.length === 2 && <article class="cozy-set" id="cozy-set">
+      <CozySetVisual {hoodie} {sweats} />
+      <div class="cozy-set-copy">
+        <h2>COZY FULL SET</h2>
+        <p>Grey hoodie + grey straight leg sweatpants.</p>
+        <p class="cozy-set-price">{money(setPrice,true)}</p>
+        {sale && <p class="cozy-set-note">Black Friday individual prices total {money(2*salePrice,true)}. <a href="#shop-separately">Shop separately</a>.</p>}
+        {hoodieSizes.length && sweatsSizes.length ? <form method="post" action="/api/cart" class="cozy-set-form">
+          <label>Hoodie size<select name="hoodie" required><option value="">Select size</option>{hoodieSizes.map(size=><option value={size.id}>{size.title}</option>)}</select></label>
+          <label>Sweatpants size<select name="sweats" required><option value="">Select size</option>{sweatsSizes.map(size=><option value={size.id}>{size.title}</option>)}</select></label>
+          <button class="btn" type="submit" name="action" value="add_set">ADD SET TO CART</button>
+        </form> : <p role="status">The set is currently sold out.</p>}
+      </div>
+    </article>}
+    {products.length > 0 && <section id="shop-separately" aria-label="Shop COZY separately">
+      <h2>{sale ? 'BLACK FRIDAY INDIVIDUAL OFFERS' : 'SHOP COZY SEPARATELY'}</h2>
+      <div class="drop-grid cozy-individual-grid">{products.map(product=><ProductCard {product} offerNow={now} />)}</div>
+    </section>}
+  </section>
+</Store>

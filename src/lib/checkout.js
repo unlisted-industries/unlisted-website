@@ -3,6 +3,7 @@ import { getCart, cartId } from './cart.js';
 import { currentUser, sendEmail } from './auth.js';
 import { emailValue, StoreError, textValue } from './http.js';
 import { money } from './content.js';
+import { ensureOffers } from './offer-schema.js';
 
 export const holdSeconds = 30 * 60;
 export const acceptedOrder = "(status <> 'cancelled' AND (payment_method = 'cod' OR payment_status IN ('paid','refunded')))";
@@ -47,6 +48,9 @@ export async function quote(db, id, governorate, code, requireInventory = true) 
   if (!rate) throw new StoreError('Select a governorate we deliver to.');
   if (cart.items.some((item) => !item.available || (requireInventory && item.inventory === null))) {
     throw new StoreError('One or more items are currently unavailable for checkout. Review your cart.', 409);
+  }
+  if (cart.hasOffer && code && !await db.prepare('SELECT 1 FROM rma_credit WHERE code=?').bind(code).first()) {
+    throw new StoreError('Discount codes cannot be combined with COZY offers. Remove the code to continue.');
   }
   const coupon = code ? await db.prepare(`SELECT code, kind, value FROM discounts WHERE code = ? AND active = 1
     AND min_subtotal <= ? AND (max_uses IS NULL OR uses < max_uses)
@@ -101,6 +105,8 @@ export async function placeOrder(db, { id, key, input, expected, user, visitor }
       ...totals.items.map((item) => [`INSERT INTO order_items
         (order_id, variant_id, product_title, variant_title, sku, quantity, price) VALUES (?, ?, ?, ?, ?, ?, ?)`,
       orderId, item.id, item.title, item.variant_title, item.sku, item.quantity, item.price]),
+      ['INSERT INTO order_cozy_sets(order_id,hoodie_id,sweats_id,quantity) SELECT ?,hoodie_id,sweats_id,quantity FROM cart_cozy_sets WHERE cart_id=?',orderId,id],
+      ['DELETE FROM cart_cozy_sets WHERE cart_id=?',id],
       ['INSERT INTO order_payment_choices (order_id, method) VALUES (?, ?)', orderId, input.method],
       ['INSERT INTO order_notifications (order_id) VALUES (?)', orderId],
       ['DELETE FROM checkout_drafts WHERE cart_id = ?', id],
@@ -130,6 +136,15 @@ export async function visibleOrder(env, context, id) {
 
 export async function orderLines(db, id) {
   return all(db.prepare('SELECT * FROM order_items WHERE order_id = ? ORDER BY product_title, variant_title').bind(id));
+}
+
+export async function orderSets(db, id) {
+  await ensureOffers(db);
+  return all(db.prepare(`SELECT bundle.quantity, hoodie.variant_title AS hoodie_size, sweats.variant_title AS sweats_size
+    FROM order_cozy_sets bundle
+    JOIN order_items hoodie ON hoodie.order_id=bundle.order_id AND hoodie.variant_id=bundle.hoodie_id
+    JOIN order_items sweats ON sweats.order_id=bundle.order_id AND sweats.variant_id=bundle.sweats_id
+    WHERE bundle.order_id=? ORDER BY bundle.hoodie_id,bundle.sweats_id`).bind(id));
 }
 
 export async function sendReceipt(env, order, origin) {

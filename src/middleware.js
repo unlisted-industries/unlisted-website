@@ -1,10 +1,11 @@
 import { defineMiddleware } from 'astro:middleware';
 import { env } from 'cloudflare:workers';
 import { ensureWorkspace } from './lib/workspace-schema.js';
+import { saleEndsAt } from './lib/offers.js';
 import { recordVisitor } from './lib/live-visitors.js';
 
 const protectedPaths = /^(?:\/(?:returns|admin|account|orders|api|cart|checkout|payment-test)(?:\/|$))/;
-const storefrontPaths = /^\/(?:$|products\/|collections\/|pages\/)/;
+const storefrontPaths = /^\/(?:$|offers$|products\/|collections\/|pages\/)/;
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { request, url } = context;
@@ -26,6 +27,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
   headers.set('X-Frame-Options', 'DENY');
   headers.set('Permissions-Policy', `camera=(), microphone=${url.pathname === '/admin/finance' ? '(self)' : '()'}, geolocation=()`);
   if (headers.get('Content-Type')?.includes('text/html')) {
+    if (Date.now() < saleEndsAt && !protectedPaths.test(url.pathname)) headers.set('Cache-Control','no-store');
     headers.set('Content-Security-Policy',
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' https://accept.paymob.com https://eg.checkout.paymob.com; object-src 'none'");
   }

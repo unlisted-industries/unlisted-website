@@ -1,0 +1,16 @@
+---
+import { blackFridayActive, saleStartsAt, saleEndsAt } from '../lib/offers.js';
+const { now, lang } = Astro.props;
+const active = blackFridayActive(now);
+const boundary = active ? saleEndsAt : saleStartsAt;
+const time = Math.max(0, Math.ceil((boundary - now) / 1000));
+const clock = [Math.floor(time / 3600), Math.floor(time / 60) % 60, time % 60].map(value => String(value).padStart(2,'0')).join(':');
+---
+{now < saleEndsAt && <aside class="offer-banner" data-offer-clock data-now={now} data-boundary={boundary} aria-label="Black Friday">
+  <a href="/offers">
+    <strong>BLACK FRIDAY</strong>
+    <span class="offer-banner-detail">{active ? (lang === 'ar' ? 'العرض ينتهي خلال' : 'Ends in') : (lang === 'ar' ? 'العرض يبدأ خلال' : 'Starts in')}</span>
+    <time datetime={new Date(boundary).toISOString()} data-offer-time aria-label={active ? 'Offer ends November 29 at midnight Cairo time' : 'Offer starts November 27 at midnight Cairo time'}>{clock}</time>
+    <span class="offer-banner-link">{lang === 'ar' ? 'العروض' : 'Shop offers'} <span aria-hidden="true">↗</span></span>
+  </a>
+</aside>}

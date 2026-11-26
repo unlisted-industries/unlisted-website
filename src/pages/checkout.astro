@@ -25,7 +25,7 @@ if (Astro.request.method === 'POST' && enabled) {
   try {
     const form = await formData(Astro.request);
     input = checkoutInput(form);
-    await env.DB.prepare('INSERT INTO checkout_drafts (cart_id,data,expires_at) VALUES (?,?,unixepoch()+1800) ON CONFLICT(cart_id) DO UPDATE SET data=excluded.data,expires_at=excluded.expires_at').bind(id,JSON.stringify(input)).run();
+    if (id && cart.items.length) await env.DB.prepare('INSERT INTO checkout_drafts (cart_id,data,expires_at) VALUES (?,?,unixepoch()+1800) ON CONFLICT(cart_id) DO UPDATE SET data=excluded.data,expires_at=excluded.expires_at').bind(id,JSON.stringify(input)).run();
     if (!(input.method === 'cod' && settings.cod_enabled || input.method === 'card' && card || input.method === 'wallet' && wallet)) {
       throw new StoreError('Select an available payment method.');
     }
@@ -46,7 +46,10 @@ const ready = Boolean(enabled && cart.items.length);
       : review ? <>
         <p>{input.name} · {input.email} · {input.phone}</p>
         <p>{input.address}, {input.city}, {review.rate.label}, Egypt</p>
-        <ul class="account-orders">{review.items.map((line) => <li>{line.quantity} × {line.title} · {line.variant_title} · {money(line.quantity * line.price)}</li>)}</ul>
+        <ul class="account-orders">
+          {review.singles.map(line => <li>{line.quantity} × {line.title} · {line.variant_title} · {money(line.quantity * line.price)}</li>)}
+          {review.sets.map(set => <li>{set.quantity} × COZY FULL SET · Hoodie {set.hoodie.variant_title} · Sweatpants {set.sweats.variant_title} · {money(set.quantity * set.price)}</li>)}
+        </ul>
         <dl class="store-totals">
           <div><dt>Subtotal</dt><dd>{money(review.subtotal)}</dd></div>
           <div><dt>Delivery</dt><dd>{money(review.rate.amount)}</dd></div>
@@ -82,7 +85,8 @@ const ready = Boolean(enabled && cart.items.length);
               {rates.map((rate) => <option value={rate.code} selected={(input?.governorate ?? profile?.governorate) === rate.code}>{rate.label} · {money(rate.amount, true)}</option>)}
             </select>
           </label>
-          <label>Discount code <input name="discount" maxlength="32" value={input?.coupon} /></label>
+          <label>{cart.hasOffer ? 'Store credit code' : 'Discount code'} <input name="discount" maxlength="32" value={input?.coupon} /></label>
+          {cart.hasOffer && <p>COZY offers can’t be combined with other discounts.</p>}
           <fieldset class="payment-options">
             <legend>Payment</legend>
             {Boolean(settings.cod_enabled) && <label class="payment-option"><input type="radio" name="payment_method" value="cod" checked={input?.method === 'cod' || !input?.method} required /><span>Cash on Delivery</span></label>}

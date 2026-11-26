@@ -1,0 +1,11 @@
+---
+import { mediaUrl } from '../lib/content.js';
+import { setPrice, setRegularPrice } from '../lib/offers.js';
+import OfferPrice from './OfferPrice.astro';
+const { hoodie, sweats } = Astro.props;
+---
+<div class="cozy-set-visual" aria-label="COZY Grey Hoodie and Straight Leg Sweatpants">
+  {hoodie.images[0] && <img src={mediaUrl(hoodie.images[0].key)} alt="COZY Grey Hoodie" width="500" height="650" />}
+  {sweats.images[0] && <img src={sweats.images[0].key === 'shop/unlisted-cozy-straight-grey-1.png' ? '/theme/catalog/straight-leg-grey-cutout.png' : mediaUrl(sweats.images[0].key)} alt="COZY Straight Leg Sweatpants" width="500" height="650" />}
+  <OfferPrice original={setRegularPrice} current={setPrice} label="Set offer" />
+</div>

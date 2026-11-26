@@ -15,7 +15,7 @@ const cart = await getCart(env.DB, cartId(Astro));
       <p>Your cart is empty.</p>
       <a class="btn" style="max-width:340px;margin-top:24px" href="/">SHOP THE COZY DROP</a>
     </> : <>
-      {cart.items.map((item) => <article class="unl-cart-item">
+      {cart.singles.map((item) => <article class="unl-cart-item">
         <a class="unl-cart-image" href={'/products/' + item.handle}>
           {item.image && <img src={mediaUrl(item.image)} alt={item.title} width="120" height="150" />}
         </a>
@@ -36,7 +36,29 @@ const cart = await getCart(env.DB, cartId(Astro));
           </form>
         </div>
       </article>)}
-      <CozyUpsell cartHandles={cart.items.map((item) => item.handle)} />
+      {cart.sets.map((set) => <article class="unl-cart-item">
+        <a class="unl-cart-image cozy-cart-set-images" href="/offers#cozy-set" aria-label="View the COZY Full Set">
+          {[set.hoodie,set.sweats].map(item=>item?.image && <img src={mediaUrl(item.image)} alt={item.title} width="60" height="75" />)}
+        </a>
+        <div class="unl-cart-details">
+          <a href="/offers#cozy-set">COZY FULL SET</a>
+          <p>HOODIE: {set.hoodie?.variant_title} · SWEATPANTS: {set.sweats?.variant_title}</p>
+          <p>{money(set.price * set.quantity)}</p>
+          {!set.available && <p role="status">One of the selected sizes is currently unavailable.</p>}
+          <form method="post" action="/api/cart" class="store-quantity">
+            <input type="hidden" name="hoodie" value={set.hoodie_id} />
+            <input type="hidden" name="sweats" value={set.sweats_id} />
+            <input type="hidden" name="action" value="update_set" />
+            <div class="unl-quantity" role="group" aria-label="COZY Full Set quantity">
+              <button class="unl-quantity-button" name="quantity" value={set.quantity-1} aria-label="Decrease set quantity">−</button>
+              <span class="unl-quantity-value">{set.quantity}</span>
+              <button class="unl-quantity-button" name="quantity" value={set.quantity+1} aria-label="Increase set quantity" disabled={set.quantity>=25 || !set.available}>+</button>
+            </div>
+            <button class="unl-cart-remove" name="quantity" value="0">REMOVE SET</button>
+          </form>
+        </div>
+      </article>)}
+      <CozyUpsell cartHandles={cart.singles.map((item) => item.handle)} />
       <div class="unl-cart-total"><span>SUBTOTAL</span><strong>{money(cart.subtotal)}</strong></div>
       <p class="unl-cart-note">Shipping is calculated at checkout.</p>
       <div class="unl-cart-actions"><a class="btn" href="/checkout">CHECKOUT</a></div>

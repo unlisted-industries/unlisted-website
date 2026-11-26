@@ -2,6 +2,8 @@
 import { env } from 'cloudflare:workers';
 import Store from '../../layouts/Store.astro';
 import CozyUpsell from '../../components/CozyUpsell.astro';
+import OfferPrice from '../../components/OfferPrice.astro';
+import { offerPrice } from '../../lib/offers.js';
 import Notice from '../../components/Notice.astro';
 import { available, cozyMatch, getProduct } from '../../lib/catalog.js';
 import { mediaUrl, money, safeHtml } from '../../lib/content.js';
@@ -9,12 +11,14 @@ const product = await getProduct(env.DB, Astro.params.handle);
 if (!product) Astro.response.status = 404;
 const variant = product?.variants.find((item) => item.id === Astro.url.searchParams.get('variant') && available(item))
   ?? product?.variants.find(available) ?? product?.variants[0];
+const offerNow = Date.now();
+const current = variant ? offerPrice(product.handle,variant.price,offerNow) : null;
 const hasCozyMatch = Boolean(product && Object.hasOwn(cozyMatch, product.handle));
 const straightLegSweats = product?.handle === 'cozy-straight-leg-sweats-grey';
 const modelHeight = straightLegSweats ? 176 : 178;
 const chart = straightLegSweats ? '/theme/catalog/straight-leg-size-chart.webp' : mediaUrl(product?.size_chart_key);
 ---
-<Store title={product?.title ?? 'Page not found'} noIndex={!product}>
+<Store title={product?.title ?? 'Page not found'} noIndex={!product} {offerNow}>
   {!product ? <section class="page"><h1 class="page-title">PRODUCT NOT FOUND</h1><p><a href="/">Back to the collection</a></p></section>
     : product.preorder ? <section class="page" style="max-width:900px;margin:auto;text-align:center;padding:70px 18px">
       <h1 class="page-title">{product.title}</h1>
@@ -25,17 +29,18 @@ const chart = straightLegSweats ? '/theme/catalog/straight-leg-size-chart.webp' 
       <div class="unl-product-images" aria-label="Product photos">
         {product.images.map((image, index) => <div class="unl-product-image">
           <img src={mediaUrl(image.key)} alt={image.alt} width="1000" height="1333" loading={index ? 'lazy' : 'eager'} />
+          {variant && current !== variant.price && <OfferPrice original={variant.price} {current} />}
           {hasCozyMatch && index === 1 && <span class="unl-model-info">MODEL: {modelHeight} CM · 67 KG · WEARS S/M</span>}
         </div>)}
       </div>
       <div class="unl-product-info">
         <h1>{product.title}</h1>
         <Notice />
-        <p class="unl-product-price" data-variant-price>{money(variant?.price)}</p>
+        <p class="unl-product-price" data-variant-price>{money(current)}</p>
         {product.variants.some(available) ? <form method="post" action="/api/cart" id="UnlistedBuyForm">
           <label class="unl-size-label" for="UnlistedVariantSelect">{(product.option_names.join(' / ') || 'Variant').toUpperCase()}</label>
           <select id="UnlistedVariantSelect" name="variant" data-variant-picker required>
-            {product.variants.map((item) => <option value={item.id} disabled={!available(item)} selected={item.id === variant?.id} data-price={money(item.price)}>{item.title}{available(item) ? '' : ' — SOLD OUT'}</option>)}
+            {product.variants.map((item) => <option value={item.id} disabled={!available(item)} selected={item.id === variant?.id} data-price={money(offerPrice(product.handle,item.price,offerNow))}>{item.title}{available(item) ? '' : ' — SOLD OUT'}</option>)}
           </select>
           <input type="hidden" name="quantity" value="1" />
           <button type="submit" name="action" value="add" class="btn unl-buy-button">ADD TO CART</button>

@@ -11,7 +11,7 @@ const origin = 'https://unlisted.test';
 const secret = 'local-test-hmac';
 const owner = 'owner@example.invalid';
 const ownerPassword = 'fixture-owner-password-one';
-const runtimeSchemas = new Set(['0014_returns_workspace.sql','0006_owner_passwords.sql', '0007_order_returns.sql', '0008_shopify_import.sql', '0009_paymob_sandbox.sql', '0010_live_visitors.sql', '0013_independent_workspace.sql']);
+const runtimeSchemas = new Set(['0015_cozy_offers.sql','0014_returns_workspace.sql','0006_owner_passwords.sql', '0007_order_returns.sql', '0008_shopify_import.sql', '0009_paymob_sandbox.sql', '0010_live_visitors.sql', '0013_independent_workspace.sql']);
 const mail = [];
 const intents = [];
 const telegram = [];
@@ -1073,4 +1073,68 @@ test('accountant matches reported costs once and keeps separate business payment
  const journal=await db.prepare("SELECT journal_id FROM ops_costs WHERE id='fixture-paid'").first('journal_id');assert.ok(journal);
  assert.equal(await db.prepare('SELECT project_id FROM ops_journal_scope WHERE journal_id=?').bind(journal).first('project_id'),'fixture-project');
  const page=await(await admin('/admin/finance?tab=cash&days=all')).text();assert.doesNotMatch(page,/Fixture already reported fabric/);
+});
+
+test('COZY offers apply at checkout, expire for stale quotes and reserve both selected set sizes exactly once', async () => {
+ const buyer = browser();
+ const hoodie = 'h', sweats = 's';
+ await db.batch([
+   db.prepare("UPDATE variants SET inventory=2 WHERE id IN ('h','s')"),
+   db.prepare("INSERT INTO finance_variant_costs(variant_id,unit_cost) VALUES ('h',21000),('s',18000) ON CONFLICT(variant_id) DO UPDATE SET unit_cost=excluded.unit_cost"),
+ ]);
+ const input = {name:'Offer fixture',email:'offer-fixture@example.invalid',phone:'01000000000',
+   address:'Fixture street',city:'Cairo',governorate:'cairo',discount:'',payment_method:'cod'};
+ const addSingle = () => buyer('/api/cart',{action:'add',variant:hoodie});
+ const setForm = {action:'add_set',hoodie,sweats,quantity:1};
+ const setTerms = async (active) => {
+   await db.batch([
+     db.prepare('DROP VIEW cozy_offer_terms'),
+     db.prepare(`CREATE VIEW cozy_offer_terms AS SELECT ${active ? '0 AS starts_at, 4102444800' : '0 AS starts_at, 1'} AS ends_at,
+       44900 AS sale_price, 52122 AS hoodie_set_price, 47778 AS sweats_set_price`),
+   ]);
+ };
+ const checkout = async (web, total) => {
+   const html = await (await web('/checkout',input)).text();
+   const field = name => new RegExp('name="'+name+'" value="([^"]*)"').exec(html)?.[1];
+   assert.equal(field('quoted_total'),String(total));
+   return {...input,cart_version:field('cart_version'),checkout_key:field('checkout_key'),quoted_total:field('quoted_total')};
+ };
+ try {
+   await setTerms(true);
+   assert.equal((await addSingle()).headers.get('Location'),'/cart');
+   assert.match(await (await buyer('/checkout',{...input,discount:'COZY10'})).text(),/Discount codes cannot be combined/);
+   const stale = await checkout(buyer,52900);
+   await setTerms(false);
+   assert.match((await buyer('/api/checkout',stale)).headers.get('Location'),/error=/);
+   await checkout(buyer,68000);
+   assert.match((await buyer('/api/cart',setForm)).headers.get('Location'),/error=/);
+   await buyer('/api/cart',{action:'remove',variant:hoodie});
+   assert.match((await buyer('/api/cart',{...setForm,hoodie:sweats,sweats:hoodie})).headers.get('Location'),/error=/);
+   assert.equal((await buyer('/api/cart',setForm)).headers.get('Location'),'/cart');
+   const cart = await (await buyer('/cart')).text();
+   assert.match(cart,/COZY FULL SET/);
+   assert.match(cart,/HOODIE: S\/M · SWEATPANTS: L/);
+   const request = await checkout(buyer,107900);
+   const added = await buyer('/api/checkout',request);
+   const path = added.headers.get('Location');
+   assert.match(path,/^\/orders\/[a-f0-9]{32}$/);
+   assert.equal((await buyer('/api/checkout',request)).headers.get('Location'),path);
+   const id = path.split('/').at(-1);
+   const {results:lines} = await db.prepare('SELECT variant_id,quantity,price FROM order_items WHERE order_id=? ORDER BY variant_id').bind(id).all();
+   assert.deepEqual(lines,[{variant_id:hoodie,quantity:1,price:52122},{variant_id:sweats,quantity:1,price:47778}]);
+   assert.equal(await db.prepare('SELECT count(*) AS count FROM finance_order_costs WHERE order_id=?').bind(id).first('count'),2);
+   assert.equal(await db.prepare('SELECT quantity FROM order_cozy_sets WHERE order_id=?').bind(id).first('quantity'),1);
+   assert.equal(await db.prepare("SELECT sum(inventory) AS stock FROM variants WHERE id IN ('h','s')").first('stock'),2);
+   const ownerWeb = browser();
+   await ownerWeb('/admin/session',{action:'password',password:ownerPassword},{'CF-Connecting-IP':'192.0.2.207'});
+   assert.match((await ownerWeb('/admin/action',{op:'order',area:'orders',id,operation:'cancel'})).headers.get('Location'),/saved=1/);
+   assert.equal(await db.prepare("SELECT sum(inventory) AS stock FROM variants WHERE id IN ('h','s')").first('stock'),4);
+ } finally {
+   await db.batch([
+     db.prepare('DROP VIEW IF EXISTS cozy_offer_terms'),
+     db.prepare(`CREATE VIEW cozy_offer_terms AS SELECT unixepoch('2026-11-27T00:00:00+02:00') AS starts_at,
+       unixepoch('2026-11-29T00:00:00+02:00') AS ends_at, 44900 AS sale_price,
+       52122 AS hoodie_set_price, 47778 AS sweats_set_price`),
+   ]);
+ }
 });

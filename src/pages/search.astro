@@ -2,12 +2,14 @@
 import { env } from 'cloudflare:workers';
 import Store from '../layouts/Store.astro';
 import { available, searchProducts } from '../lib/catalog.js';
+import { offerPrice } from '../lib/offers.js';
 import { mediaUrl, money } from '../lib/content.js';
 
+const offerNow = Date.now();
 const query = (Astro.url.searchParams.get('q') ?? '').trim().slice(0, 100);
 const products = query ? await searchProducts(env.DB, query) : [];
 ---
-<Store title="Search" noIndex>
+<Store title="Search" noIndex {offerNow}>
   <section class="page">
     <div class="eyebrow">SEARCH</div>
     <h1 class="page-title">SEARCH UNLISTED</h1>
@@ -18,15 +20,17 @@ const products = query ? await searchProducts(env.DB, query) : [];
     {query && <div class="grid" style="margin-top:26px">
       {products.length ? products.map((product) => {
         const variant = product.variants.find(available) ?? product.variants[0];
-        const sale = variant && variant.compare_at > variant.price;
+        const current = variant && offerPrice(product.handle,variant.price,offerNow);
+        const original = variant && (current !== variant.price ? variant.price : variant.compare_at);
+        const sale = original > current;
         return <a class="product-card" href={'/products/' + product.handle}>
           <div class="photo">
             <img src={mediaUrl(product.images[0]?.key) ?? '/theme/product-santorini.webp'} alt={product.images[0]?.alt ?? product.title} loading="lazy" width="960" height="1280" />
           </div>
           <div class="product-name">{product.title}</div>
           <div class="price">
-            {sale && <span class="was">{money(variant.compare_at)}</span>}
-            {variant && <span class:list={['now', { regular: !sale }]}>{money(variant.price)}</span>}
+            {sale && <span class="was">{money(original)}</span>}
+            {variant && <span class:list={['now', { regular: !sale }]}>{money(current)}</span>}
             {!product.variants.some(available) && <span class="sold-label">SOLD OUT</span>}
           </div>
         </a>;
