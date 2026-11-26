@@ -352,10 +352,17 @@ test('storefront search, size chart and COZY matching item follow the supplied t
   assert.match(search, /SEARCH UNLISTED/);
   assert.match(search, /COZY HOODIE - GREY/);
   assert.doesNotMatch(search, /COZY STRAIGHT LEG SWEATS - GREY/);
+  const hoodie = await (await web('/products/cozy-hoodie-grey')).text();
+  assert.match(hoodie, /Garment measurements \(cm\)/);
+  const chartRows = [...hoodie.matchAll(/<th scope="row"[^>]*>([^<]+)<\/th><td[^>]*>(\d+)<\/td><td[^>]*>(\d+)<\/td>/g)];
+  assert.deepEqual(chartRows.map(row => row.slice(1)), [
+    ['Length', '61', '63'], ['Chest', '64', '65'], ['Shoulder', '60', '62'], ['Sleeve', '56', '56'],
+  ]);
   const sweats = '/products/cozy-straight-leg-sweats-grey';
   const product = await (await web(sweats)).text();
   assert.match(product, /unlisted-section-group-header-group/);
   assert.match(product, /\/theme\/catalog\/straight-leg-size-chart\.webp/);
+  assert.doesNotMatch(product, /Garment measurements \(cm\)/);
   assert.match(product, /MODEL: 176 CM/);
   assert.doesNotMatch(product, /MODEL: 178 CM|id="SizeGuide"|Size chart coming soon/);
   assert.match(product, /COMPLETE THE LOOK/);

@@ -1,5 +1,5 @@
 .offer-banner {
-  background: #0b1830;
+  background: #560c18;
   color: #fff;
   text-align: center;
   font-size: 12px;
@@ -10,15 +10,23 @@
   justify-content: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 5px 13px;
-  padding: 10px 14px;
+  gap: 6px clamp(8px, 2vw, 22px);
+  padding: 8px 10px;
   min-height: 44px;
   color: inherit;
   text-decoration: none;
 }
-.offer-banner strong { letter-spacing: .12em; font-size: 11px; }
-.offer-banner-detail { color: #d8e0ee; }
-.offer-banner time { font-weight: 700; letter-spacing: .07em; min-width: 8ch; }
+.offer-banner strong { letter-spacing: .09em; font-size: 11px; }
+.offer-banner-countdown { display: inline-flex; align-items: center; gap: 6px; }
+.offer-banner-detail { color: #ffe5e6; }
+.offer-banner time {
+  color: #ffb4b8;
+  font-size: clamp(21px, 4vw, 32px);
+  font-weight: 800;
+  letter-spacing: .025em;
+  line-height: 1.1;
+  direction: ltr;
+}
 .offer-banner-link { text-decoration: underline; text-underline-offset: 3px; }
 .drop-card-image, .unl-product-image, .cozy-set-visual { position: relative; }
 .offer-price-tag {
@@ -29,15 +37,17 @@
   gap: 4px;
   max-width: calc(100% - 24px);
   padding: 8px 10px;
-  background: #0b1830;
-  color: #fff;
+  background: #fff5f5;
+  border: 1px solid #ebc5ca;
+  color: #691925;
   text-align: right;
   line-height: 1.1;
 }
 .offer-price-label { font-size: 9px; letter-spacing: .09em; text-transform: uppercase; }
 .offer-price-values { display: flex; flex-wrap: wrap; justify-content: end; align-items: baseline; gap: 4px 8px; }
-.offer-price-values del { color: #d8e0ee; font-size: 11px; }
+.offer-price-values del { color: #674c52; font-size: 11px; }
 .offer-price-values strong { font-size: 14px; }
+.offer-price-values strong, .offer-sale-price, .cozy-set-price { color: #b2132e; }
 .cozy-offers { color: #0b1830; }
 .cozy-offers h2, .cozy-home-offer h2 { font-size: clamp(18px,3vw,30px); font-weight: 700; letter-spacing: .04em; }
 .cozy-set { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: clamp(36px,6vw,72px); background: #f2f2f2; align-items: center; }
