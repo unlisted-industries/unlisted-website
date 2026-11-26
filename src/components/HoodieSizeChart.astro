@@ -1,4 +1,6 @@
 ---
+import diagram from './cozy-hoodie-measurement.webp';
+
 const measurements = [
   ['Length', 61, 63],
   ['Chest', 64, 65],
@@ -8,21 +10,14 @@ const measurements = [
 ---
 
 <div class="hoodie-chart">
-  <div class="hoodie-chart-photo">
-    <img src="/media/shop/unlisted-cozy-hoodie-grey-1.webp" alt="Front view of the COZY Grey Hoodie" width="1000" height="1333" loading="lazy" />
-    <div class="hoodie-chart-guides" aria-hidden="true">
-      <span class="hoodie-measure-line length"><span>1</span></span>
-      <span class="hoodie-measure-line chest"><span>2</span></span>
-      <span class="hoodie-measure-line shoulder"><span>3</span></span>
-      <span class="hoodie-measure-line sleeve"><span>4</span></span>
-    </div>
-  </div>
+  <img class="hoodie-chart-image" src={diagram.src} width={diagram.width} height={diagram.height}
+    alt="Hoodie illustration showing where to measure shoulder, chest, body length and sleeve" loading="lazy" />
   <table>
     <caption>Garment measurements (cm)</caption>
     <thead><tr><th scope="col">Measurement</th><th scope="col">S/M</th><th scope="col">L</th></tr></thead>
     <tbody>
-      {measurements.map(([label, smallMedium, large], index) =>
-        <tr><th scope="row" data-point={index + 1}>{label}</th><td>{smallMedium}</td><td>{large}</td></tr>
+      {measurements.map(([label, smallMedium, large]) =>
+        <tr><th scope="row">{label}</th><td>{smallMedium}</td><td>{large}</td></tr>
       )}
     </tbody>
   </table>
@@ -34,69 +29,12 @@ const measurements = [
     background: #fff;
     color: #171717;
   }
-  .hoodie-chart-photo {
-    position: relative;
-    max-width: 420px;
-    aspect-ratio: 420 / 370;
-    margin: 0 auto 16px;
-    background: #efefef;
-    overflow: hidden;
-  }
-  img {
-    position: absolute;
-    inset: -24.32% 0 auto;
+  .hoodie-chart-image {
     display: block;
     width: 100%;
+    max-width: 420px;
     height: auto;
-    filter: grayscale(1);
-  }
-  .hoodie-chart-guides { position: absolute; inset: 0; }
-  .hoodie-measure-line {
-    position: absolute;
-    height: 1px;
-    background: #242424;
-    transform-origin: left center;
-  }
-  .hoodie-measure-line::before, .hoodie-measure-line::after {
-    position: absolute;
-    top: -3px;
-    width: 1px;
-    height: 7px;
-    background: inherit;
-    content: '';
-  }
-  .hoodie-measure-line::before { left: 0; }
-  .hoodie-measure-line::after { right: 0; }
-  .hoodie-measure-line span {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    display: grid;
-    place-items: center;
-    width: 20px;
-    height: 20px;
-    border: 1px solid #242424;
-    border-radius: 50%;
-    background: #fff;
-    font-size: 10px;
-    font-weight: 700;
-    transform: translate(-50%, -50%) rotate(calc(-1 * var(--angle, 0deg)));
-  }
-  .length {
-    --angle: 90deg;
-    left: 34%;
-    top: 21%;
-    width: 58%;
-    transform: rotate(var(--angle));
-  }
-  .chest { left: 30%; top: 50%; width: 40%; }
-  .shoulder { left: 27%; top: 31%; width: 46%; }
-  .sleeve {
-    --angle: 84deg;
-    left: 75%;
-    top: 32%;
-    width: 55%;
-    transform: rotate(var(--angle));
+    margin: 0 auto 16px;
   }
   table {
     width: 100%;
@@ -123,15 +61,4 @@ const measurements = [
   thead { border-top: 1px solid #242424; }
   th:first-child { text-align: start; padding-inline-start: 0; }
   th[scope="row"] { font-weight: 500; }
-  th[data-point]::before {
-    display: inline-grid;
-    place-items: center;
-    width: 17px;
-    height: 17px;
-    margin-inline-end: 7px;
-    border: 1px solid #666;
-    border-radius: 50%;
-    font-size: 10px;
-    content: attr(data-point) / "";
-  }
 </style>
