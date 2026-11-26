@@ -11,10 +11,10 @@ const measurements = [
   <div class="hoodie-chart-photo">
     <img src="/media/shop/unlisted-cozy-hoodie-grey-1.webp" alt="Front view of the COZY Grey Hoodie" width="1000" height="1333" loading="lazy" />
     <div class="hoodie-chart-guides" aria-hidden="true">
-      <span class="guide length"><span>1</span></span>
-      <span class="guide chest"><span>2</span></span>
-      <span class="guide shoulder"><span>3</span></span>
-      <span class="guide sleeve"><span>4</span></span>
+      <span class="hoodie-measure-line length"><span>1</span></span>
+      <span class="hoodie-measure-line chest"><span>2</span></span>
+      <span class="hoodie-measure-line shoulder"><span>3</span></span>
+      <span class="hoodie-measure-line sleeve"><span>4</span></span>
     </div>
   </div>
   <table>
@@ -51,13 +51,13 @@ const measurements = [
     filter: grayscale(1);
   }
   .hoodie-chart-guides { position: absolute; inset: 0; }
-  .guide {
+  .hoodie-measure-line {
     position: absolute;
     height: 1px;
     background: #242424;
     transform-origin: left center;
   }
-  .guide::before, .guide::after {
+  .hoodie-measure-line::before, .hoodie-measure-line::after {
     position: absolute;
     top: -3px;
     width: 1px;
@@ -65,9 +65,9 @@ const measurements = [
     background: inherit;
     content: '';
   }
-  .guide::before { left: 0; }
-  .guide::after { right: 0; }
-  .guide span {
+  .hoodie-measure-line::before { left: 0; }
+  .hoodie-measure-line::after { right: 0; }
+  .hoodie-measure-line span {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -89,7 +89,7 @@ const measurements = [
     width: 58%;
     transform: rotate(var(--angle));
   }
-  .chest { left: 30%; top: 44%; width: 40%; }
+  .chest { left: 30%; top: 50%; width: 40%; }
   .shoulder { left: 27%; top: 31%; width: 46%; }
   .sleeve {
     --angle: 84deg;
@@ -110,12 +110,14 @@ const measurements = [
     font-size: 13px;
     font-weight: 700;
     text-align: start;
+    color: inherit;
   }
   th, td {
     padding: 10px 8px;
     border: 0;
     border-bottom: 1px solid #dedede;
     text-align: center;
+    color: inherit;
     white-space: nowrap;
   }
   thead { border-top: 1px solid #242424; }
