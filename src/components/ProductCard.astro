@@ -20,5 +20,5 @@ const current = price === null ? null : offerPrice(product.handle,price,offerNow
   </div>
   {Boolean(product.preorder) && <span class="drop-badge">PRE-ORDER</span>}
   <h2>{product.title}</h2>
-  {price !== null && <span class:list={['drop-price', { 'offer-sale-price': current !== price }]}>{money(current, true)}</span>}
+  {price !== null && <span class="drop-price">{money(current, true)}</span>}
 </a>

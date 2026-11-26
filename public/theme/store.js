@@ -39,6 +39,22 @@ if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
   document.querySelector('.drop-film video')?.pause();
 }
 
+const sizeFinder = document.querySelector('[data-cozy-size-finder]');
+if (sizeFinder) {
+  const fields = [...sizeFinder.querySelectorAll('input')];
+  const result = sizeFinder.querySelector('output');
+  sizeFinder.addEventListener('input', () => { result.textContent = ''; });
+  sizeFinder.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const distance = (size) => fields.reduce((total, field) =>
+      total + Math.abs(Math.round(field.valueAsNumber * 10) - Number(field.dataset[size]) * 10), 0);
+    const smallMedium = distance('smallMedium');
+    const large = distance('large');
+    result.textContent = smallMedium === large
+      ? 'S/M and L are equally close. Choose S/M for a closer fit or L for more room.'
+      : 'Closest match to your garment: ' + (smallMedium < large ? 'S/M.' : 'L.');
+  });
+}
 const offerClock = document.querySelector('[data-offer-clock]');
 if (offerClock) {
   const time = offerClock.querySelector('[data-offer-time]');
