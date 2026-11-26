@@ -57,7 +57,7 @@ if (sizeFinder) {
 }
 const offerClock = document.querySelector('[data-offer-clock]');
 if (offerClock) {
-  const time = offerClock.querySelector('[data-offer-time]');
+  const digitGroups = offerClock.querySelectorAll('[data-offer-time] .offer-banner-digits');
   const boundary = Number(offerClock.dataset.boundary);
   const serverTime = Number(offerClock.dataset.now);
   const navigation = performance.getEntriesByType('navigation')[0];
@@ -73,8 +73,10 @@ if (offerClock) {
       if (!document.querySelector('form[action="/api/checkout"]')) location.reload();
       return;
     }
-    time.textContent = [Math.floor(remaining / 3600), Math.floor(remaining / 60) % 60, remaining % 60]
-      .map(value => String(value).padStart(2,'0')).join(':');
+    const values = [Math.floor(remaining / 3600), Math.floor(remaining / 60) % 60, remaining % 60];
+    digitGroups.forEach((group, index) => {
+      group.textContent = String(values[index]).padStart(2, '0');
+    });
     timer = setTimeout(tick, 250);
   }
   addEventListener('pageshow', tick);

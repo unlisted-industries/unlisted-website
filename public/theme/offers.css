@@ -27,6 +27,7 @@
   line-height: 1.1;
   direction: ltr;
 }
+.offer-banner-digits { color: #fe0000; }
 .offer-banner-link { text-decoration: underline; text-underline-offset: 3px; }
 .drop-card-image, .unl-product-image, .cozy-set-visual { position: relative; }
 .offer-price-tag {
