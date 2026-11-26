@@ -8,41 +8,21 @@ const measurements = [
 ---
 
 <div class="hoodie-chart">
-  <div class="hoodie-chart-figure">
-    <svg viewBox="0 0 320 252" role="img" aria-labelledby="hoodie-chart-description">
-      <title id="hoodie-chart-description">Hoodie laid flat, showing shoulder width, chest width, body length and sleeve length</title>
-      <defs>
-        <marker id="hoodie-chart-arrow" viewBox="0 0 8 8" markerWidth="6" markerHeight="6" refX="6.5" refY="4" orient="auto-start-reverse">
-          <path d="m1 1 5 3-5 3" fill="none" stroke="#0b1830" stroke-linecap="round" stroke-linejoin="round" />
-        </marker>
-      </defs>
-      <g stroke="#546275" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M121 71c-9 5-30 9-41 17-12 9-17 20-21 35L33 215c6 7 19 10 32 9l20-54v59q72 9 144 0v-59l20 54c13 1 26-2 32-9l-26-92c-4-15-9-26-21-35-11-8-32-12-41-17z" fill="#dce3eb" />
-        <path d="m33 215-4 13q13 10 32 9l4-13m184 0 4 13q19 1 32-9l-4-13M85 218q72 9 144 0" fill="none" />
-        <path d="M85 170v-47m144 47v-47M136 176h42l15 25q-36 4-72 0z" fill="none" />
-        <path d="M121 71c-2-18 5-43 18-56 9-9 27-9 36 0 13 13 20 38 18 56-11 11-23 16-36 16s-25-5-36-16Z" fill="#c1ccd9" />
-        <path d="M130 65c1-18 8-47 27-50 19 3 26 32 27 50-6 10-16 15-27 15s-21-5-27-15Z" fill="#a9b8ca" />
-      </g>
-      <g stroke="#0b1830" stroke-width="1.5" marker-start="url(#hoodie-chart-arrow)" marker-end="url(#hoodie-chart-arrow)">
-        <path d="M80 60h154" />
-        <path d="M86 143h142" />
-        <path d="M103 79v148" />
-        <path d="m248 89 41 129" />
-      </g>
-      <g fill="#0b1830" font-size="11" font-weight="700" text-anchor="middle">
-        <text x="157" y="50">Shoulder</text>
-        <text x="157" y="135">Chest</text>
-        <text x="117" y="184" transform="rotate(-90 117 184)">Length</text>
-        <text x="284" y="148" transform="rotate(72 284 148)">Sleeve</text>
-      </g>
-    </svg>
+  <div class="hoodie-chart-photo">
+    <img src="/media/shop/unlisted-cozy-hoodie-grey-1.webp" alt="Front view of the COZY Grey Hoodie" width="1000" height="1333" loading="lazy" />
+    <div class="hoodie-chart-guides" aria-hidden="true">
+      <span class="guide length"><span>1</span></span>
+      <span class="guide chest"><span>2</span></span>
+      <span class="guide shoulder"><span>3</span></span>
+      <span class="guide sleeve"><span>4</span></span>
+    </div>
   </div>
   <table>
     <caption>Garment measurements (cm)</caption>
     <thead><tr><th scope="col">Measurement</th><th scope="col">S/M</th><th scope="col">L</th></tr></thead>
     <tbody>
-      {measurements.map(([label, smallMedium, large]) =>
-        <tr><th scope="row">{label}</th><td>{smallMedium}</td><td>{large}</td></tr>
+      {measurements.map(([label, smallMedium, large], index) =>
+        <tr><th scope="row" data-point={index + 1}>{label}</th><td>{smallMedium}</td><td>{large}</td></tr>
       )}
     </tbody>
   </table>
@@ -50,20 +30,73 @@ const measurements = [
 
 <style>
   .hoodie-chart {
-    padding: clamp(12px, 3vw, 24px);
-    background: #f6f8fc;
-    color: #0b1830;
-    border: 1px solid #dce3eb;
-  }
-  .hoodie-chart-figure {
-    padding: 14px 8px 6px;
+    padding: 16px 0 0;
     background: #fff;
+    color: #171717;
   }
-  svg {
+  .hoodie-chart-photo {
+    position: relative;
+    max-width: 420px;
+    aspect-ratio: 420 / 370;
+    margin: 0 auto 16px;
+    background: #efefef;
+    overflow: hidden;
+  }
+  img {
+    position: absolute;
+    inset: -24.32% 0 auto;
     display: block;
     width: 100%;
-    max-width: 320px;
-    margin: auto;
+    height: auto;
+    filter: grayscale(1);
+  }
+  .hoodie-chart-guides { position: absolute; inset: 0; }
+  .guide {
+    position: absolute;
+    height: 1px;
+    background: #242424;
+    transform-origin: left center;
+  }
+  .guide::before, .guide::after {
+    position: absolute;
+    top: -3px;
+    width: 1px;
+    height: 7px;
+    background: inherit;
+    content: '';
+  }
+  .guide::before { left: 0; }
+  .guide::after { right: 0; }
+  .guide span {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border: 1px solid #242424;
+    border-radius: 50%;
+    background: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    transform: translate(-50%, -50%) rotate(calc(-1 * var(--angle, 0deg)));
+  }
+  .length {
+    --angle: 90deg;
+    left: 34%;
+    top: 21%;
+    width: 58%;
+    transform: rotate(var(--angle));
+  }
+  .chest { left: 30%; top: 44%; width: 40%; }
+  .shoulder { left: 27%; top: 31%; width: 46%; }
+  .sleeve {
+    --angle: 84deg;
+    left: 75%;
+    top: 32%;
+    width: 55%;
+    transform: rotate(var(--angle));
   }
   table {
     width: 100%;
@@ -73,19 +106,30 @@ const measurements = [
     font-variant-numeric: tabular-nums;
   }
   caption {
-    padding: 15px 0 10px;
+    padding: 0 0 12px;
     font-size: 13px;
     font-weight: 700;
     text-align: start;
   }
   th, td {
-    padding: 8px 6px;
+    padding: 10px 8px;
     border: 0;
-    border-bottom: 1px solid #dce3eb;
+    border-bottom: 1px solid #dedede;
     text-align: center;
     white-space: nowrap;
   }
-  thead { background: #e7eef8; }
-  th:first-child { text-align: start; }
+  thead { border-top: 1px solid #242424; }
+  th:first-child { text-align: start; padding-inline-start: 0; }
   th[scope="row"] { font-weight: 500; }
+  th[data-point]::before {
+    display: inline-grid;
+    place-items: center;
+    width: 17px;
+    height: 17px;
+    margin-inline-end: 7px;
+    border: 1px solid #666;
+    border-radius: 50%;
+    font-size: 10px;
+    content: attr(data-point) / "";
+  }
 </style>
