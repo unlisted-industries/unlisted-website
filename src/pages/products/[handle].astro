@@ -4,7 +4,8 @@ import Store from '../../layouts/Store.astro';
 import CozyUpsell from '../../components/CozyUpsell.astro';
 import OfferPrice from '../../components/OfferPrice.astro';
 import HoodieSizeChart from '../../components/HoodieSizeChart.astro';
-import { hoodieHandle, offerPrice } from '../../lib/offers.js';
+import CozySizeFinder from '../../components/CozySizeFinder.astro';
+import { hoodieHandle, sweatsHandle, offerPrice } from '../../lib/offers.js';
 import Notice from '../../components/Notice.astro';
 import { available, cozyMatch, getProduct } from '../../lib/catalog.js';
 import { mediaUrl, money, safeHtml } from '../../lib/content.js';
@@ -16,8 +17,8 @@ const offerNow = Date.now();
 const current = variant ? offerPrice(product.handle,variant.price,offerNow) : null;
 const hasCozyMatch = Boolean(product && Object.hasOwn(cozyMatch, product.handle));
 const cozyHoodie = product?.handle === hoodieHandle;
-const straightLegSweats = product?.handle === 'cozy-straight-leg-sweats-grey';
-const modelHeight = straightLegSweats ? 176 : 178;
+const straightLegSweats = product?.handle === sweatsHandle;
+const showCozyFit = cozyHoodie || straightLegSweats;
 const chart = straightLegSweats ? '/theme/catalog/straight-leg-size-chart.webp' : mediaUrl(product?.size_chart_key);
 ---
 <Store title={product?.title ?? 'Page not found'} noIndex={!product} {offerNow}>
@@ -32,13 +33,13 @@ const chart = straightLegSweats ? '/theme/catalog/straight-leg-size-chart.webp' 
         {product.images.map((image, index) => <div class="unl-product-image">
           <img src={mediaUrl(image.key)} alt={image.alt} width="1000" height="1333" loading={index ? 'lazy' : 'eager'} />
           {variant && current !== variant.price && <OfferPrice original={variant.price} {current} />}
-          {hasCozyMatch && index === 1 && <span class="unl-model-info">MODEL: {modelHeight} CM · 67 KG · WEARS S/M</span>}
+          {showCozyFit && index === 1 && <span class="unl-model-info">MODEL: 172 CM · 67 KG · WEARS S/M</span>}
         </div>)}
       </div>
       <div class="unl-product-info">
         <h1>{product.title}</h1>
         <Notice />
-        <p class:list={['unl-product-price', { 'offer-sale-price': variant && current !== variant.price }]} data-variant-price>{money(current)}</p>
+        <p class="unl-product-price" data-variant-price>{money(current)}</p>
         {product.variants.some(available) ? <form method="post" action="/api/cart" id="UnlistedBuyForm">
           <label class="unl-size-label" for="UnlistedVariantSelect">{(product.option_names.join(' / ') || 'Variant').toUpperCase()}</label>
           <select id="UnlistedVariantSelect" name="variant" data-variant-picker required>
@@ -49,6 +50,7 @@ const chart = straightLegSweats ? '/theme/catalog/straight-leg-size-chart.webp' 
           <button type="submit" name="action" value="buy" class="btn unl-buy-now-button">BUY NOW</button>
         </form> : <button type="button" class="btn unl-buy-button" disabled>SOLD OUT</button>}
         <div class="unl-product-details">
+          {showCozyFit && <CozySizeFinder hoodie={cozyHoodie} />}
           {cozyHoodie ? <details><summary>Size chart</summary><HoodieSizeChart /></details>
           : chart && <details><summary>Size chart</summary>
             <a href={chart} target="_blank" rel="noopener" class="unl-size-chart">
