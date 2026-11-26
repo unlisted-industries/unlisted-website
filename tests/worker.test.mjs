@@ -345,7 +345,7 @@ test('storefront search, size chart and COZY matching item follow the supplied t
     db.prepare("INSERT INTO products (id, handle, title, status, size_chart_key) VALUES ('sweats', 'cozy-straight-leg-sweats-grey', 'COZY STRAIGHT LEG SWEATS - GREY', 'active', ?)").bind(chart),
     db.prepare("INSERT INTO variants (id, product_id, title, price, inventory) VALUES ('h', 'hoodie', 'S/M', 60000, 2), ('s', 'sweats', 'L', 55000, 2)"),
     db.prepare("INSERT INTO media (key, content_type, original_name) VALUES ('shop/sweatpants-model.webp','image/webp','Model')"),
-    db.prepare("INSERT INTO product_images (product_id, media_key, position) VALUES ('sweats',?,0),('sweats','shop/sweatpants-model.webp',1)").bind(chart),
+    db.prepare("INSERT INTO product_images (product_id, media_key, position) VALUES ('sweats',?,0),('sweats','shop/sweatpants-model.webp',1),('hoodie',?,0),('hoodie','shop/sweatpants-model.webp',1)").bind(chart, chart),
   ]);
   const web = browser();
   const search = await (await web('/search?q=cozy+hoodie')).text();
@@ -353,6 +353,9 @@ test('storefront search, size chart and COZY matching item follow the supplied t
   assert.match(search, /COZY HOODIE - GREY/);
   assert.doesNotMatch(search, /COZY STRAIGHT LEG SWEATS - GREY/);
   const hoodie = await (await web('/products/cozy-hoodie-grey')).text();
+  assert.match(hoodie, /MODEL: 172 CM · 67 KG · WEARS S\/M/);
+  assert.match(hoodie, /Calculate my size/);
+  assert.match(hoodie, /data-small-medium="64" data-large="65"/);
   assert.match(hoodie, /Garment measurements \(cm\)/);
   const chartRows = [...hoodie.matchAll(/<th scope="row"[^>]*>([^<]+)<\/th><td[^>]*>(\d+)<\/td><td[^>]*>(\d+)<\/td>/g)];
   assert.deepEqual(chartRows.map(row => row.slice(1)), [
@@ -363,8 +366,10 @@ test('storefront search, size chart and COZY matching item follow the supplied t
   assert.match(product, /unlisted-section-group-header-group/);
   assert.match(product, /\/theme\/catalog\/straight-leg-size-chart\.webp/);
   assert.doesNotMatch(product, /Garment measurements \(cm\)/);
-  assert.match(product, /MODEL: 176 CM/);
-  assert.doesNotMatch(product, /MODEL: 178 CM|id="SizeGuide"|Size chart coming soon/);
+  assert.match(product, /MODEL: 172 CM · 67 KG · WEARS S\/M/);
+  assert.match(product, /Calculate my size/);
+  assert.match(product, /data-small-medium="35" data-large="37"/);
+  assert.doesNotMatch(product, /MODEL: 17[368] CM|id="SizeGuide"|Size chart coming soon/);
   assert.match(product, /COMPLETE THE LOOK/);
   assert.equal((await web('/api/cart', { action: 'add', variant: 's' })).headers.get('Location'), '/cart');
   assert.match(await (await web('/cart')).text(), /COMPLETE THE LOOK/);
