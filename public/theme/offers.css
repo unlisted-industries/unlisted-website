@@ -1,5 +1,5 @@
 .offer-banner {
-  background: #560c18;
+  background: #0b1830;
   color: #fff;
   text-align: center;
   font-size: 12px;
@@ -18,9 +18,9 @@
 }
 .offer-banner strong { letter-spacing: .09em; font-size: 11px; }
 .offer-banner-countdown { display: inline-flex; align-items: center; gap: 6px; }
-.offer-banner-detail { color: #ffe5e6; }
+.offer-banner-detail { color: #e1e9f5; }
 .offer-banner time {
-  color: #ffb4b8;
+  color: #ff7d87;
   font-size: clamp(21px, 4vw, 32px);
   font-weight: 800;
   letter-spacing: .025em;
@@ -37,17 +37,17 @@
   gap: 4px;
   max-width: calc(100% - 24px);
   padding: 8px 10px;
-  background: #fff5f5;
-  border: 1px solid #ebc5ca;
-  color: #691925;
+  background: #fff;
+  border: 1px solid #d7dee8;
+  color: #0b1830;
   text-align: right;
   line-height: 1.1;
 }
 .offer-price-label { font-size: 9px; letter-spacing: .09em; text-transform: uppercase; }
 .offer-price-values { display: flex; flex-wrap: wrap; justify-content: end; align-items: baseline; gap: 4px 8px; }
-.offer-price-values del { color: #674c52; font-size: 11px; }
+.offer-price-values del { color: #475569; font-size: 11px; }
 .offer-price-values strong { font-size: 14px; }
-.offer-price-values strong, .offer-sale-price, .cozy-set-price { color: #b2132e; }
+.offer-price-values .offer-amount { color: #b2132e; }
 .cozy-offers { color: #0b1830; }
 .cozy-offers h2, .cozy-home-offer h2 { font-size: clamp(18px,3vw,30px); font-weight: 700; letter-spacing: .04em; }
 .cozy-set { display: grid; grid-template-columns: 1fr 1fr; margin-bottom: clamp(36px,6vw,72px); background: #f2f2f2; align-items: center; }
