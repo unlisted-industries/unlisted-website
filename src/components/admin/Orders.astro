@@ -1,5 +1,6 @@
 ---
 import { orderNo } from '../../lib/order-number.js';
+import { preorderDeposits, preorderNo } from '../../lib/preorder-deposit.js';
 import { env } from 'cloudflare:workers';
 import { all, isToken } from '../../lib/db.js';
 import { queryOffset } from '../../lib/admin.js';
@@ -22,11 +23,12 @@ const queries = {
   orders: () => unifiedOrders(env.DB,{q,offset}),
   customers: () => unifiedCustomers(env.DB,q,offset),
   inbox: () => inbox === 'preorders'
-    ? all(env.DB.prepare(`SELECT r.*, p.title AS product, v.title AS variant FROM preorder_requests r
-      JOIN products p ON p.id = r.product_id JOIN variants v ON v.id = r.variant_id
-      ORDER BY r.consent_at DESC LIMIT 26 OFFSET ?`).bind(offset))
+    ? preorderDeposits(env.DB, offset)
     : all(env.DB.prepare('SELECT * FROM contact_messages ORDER BY created_at DESC LIMIT 26 OFFSET ?').bind(offset)),
 };
+const legacyPreorders = section === 'inbox' && inbox === 'preorders' ? await all(env.DB.prepare(`SELECT r.*, p.title AS product, v.title AS variant FROM preorder_requests r
+      JOIN products p ON p.id = r.product_id JOIN variants v ON v.id = r.variant_id
+      ORDER BY r.consent_at DESC LIMIT 50`)) : [];
 const history = section === 'orders' && id?.startsWith('history:') ? await historicalOrder(env.DB,id.slice(8)) : null;
 const list = order || customerEmail || history ? [] : await queries[section]();
 const chosenMethod = order ? await env.DB.prepare('SELECT method FROM order_payment_choices WHERE order_id=?').bind(order.id).first('method') ?? order.payment_method : '';
@@ -110,9 +112,13 @@ const actions = order ? [
   <div class="tabs"><a href="/admin/inbox" aria-current={inbox === 'messages' ? 'page' : undefined}>Contact messages</a>
     <a href="/admin/inbox?kind=preorders" aria-current={inbox === 'preorders' ? 'page' : undefined}>Pre-orders</a></div>
   {inbox === 'preorders' ? <div class="table-wrap"><table>
+    <thead><tr><th>#</th><th>Customer</th><th>Size</th><th>Address</th><th>Deposit</th><th>Collect on delivery</th></tr></thead>
+    <tbody>{list.slice(0, 25).map((row) => <tr><td>{preorderNo(row)}<br /><small>{displayDate(row.created_at)}</small></td><td>{row.name}<br /><small>{row.email}</small><br /><small>{row.phone}</small></td><td>{row.variant_title}</td><td>{row.address}, {row.city}, {row.shipping_label}</td><td><span class="pill">{row.status === 'pending' ? 'awaiting payment' : row.status}</span> {money(row.deposit, true)}</td><td>{money(row.balance, true)}</td></tr>)}</tbody>
+  </table>
+  {legacyPreorders.length > 0 && <><h3>Earlier free registrations</h3><table>
     <thead><tr><th>Customer</th><th>Product and size</th><th>WhatsApp</th><th>Consent</th></tr></thead>
-    <tbody>{list.slice(0, 25).map((row) => <tr><td>{row.name}<br /><small>{row.email}</small></td><td>{row.product} · {row.variant}</td><td>{row.phone}</td><td>{displayDate(row.consent_at)}</td></tr>)}</tbody>
-  </table></div> : <div class="message-list">{list.slice(0, 25).map((row) => <details class="admin-detail">
+    <tbody>{legacyPreorders.map((row) => <tr><td>{row.name}<br /><small>{row.email}</small></td><td>{row.product} · {row.variant}</td><td>{row.phone}</td><td>{displayDate(row.consent_at)}</td></tr>)}</tbody>
+  </table></>}</div> : <div class="message-list">{list.slice(0, 25).map((row) => <details class="admin-detail">
     <summary>{row.name} · {displayDate(row.created_at)} {row.read_at ? '' : '· New'}</summary>
     <p>{row.email} {row.phone ? '· ' + row.phone : ''}</p><p class="preserve">{row.message}</p>
     {!row.read_at && <form method="post" action="/admin/action"><Fields op="inbox" area="inbox" />

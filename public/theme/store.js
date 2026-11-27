@@ -49,30 +49,19 @@ if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
 
 const sizeFinder = document.querySelector('[data-cozy-size-finder]');
 if (sizeFinder) {
-  const fields = [...sizeFinder.querySelectorAll('input[data-kind]')];
   const heightField = sizeFinder.querySelector('[data-height]');
+  const weightField = sizeFinder.querySelector('[data-weight]');
   const result = sizeFinder.querySelector('output');
-  // Room the UNLISTED garment needs over the customer's own well-fitting garment.
-  // Lengths: 2 cm for wash shrinkage. Chest: 1 cm. Elastic waist: may be up to 1 cm smaller.
-  const margin = { length: 2, width: 1, waist: -1 };
+  // Two relaxed sizes. The model (172 cm, 67 kg) wears S/M.
+  const limit = { height: 177, weight: 78 };
   sizeFinder.addEventListener('input', () => { result.textContent = ''; });
   sizeFinder.addEventListener('submit', (event) => {
     event.preventDefault();
-    const sizes = [['S/M', 'smallMedium'], ['L', 'large']];
-    const check = (key) => fields.map((field) => {
-      const mine = field.valueAsNumber, theirs = Number(field.dataset[key]);
-      return { label: field.dataset.label, kind: field.dataset.kind, mine, theirs, room: theirs - mine, ok: theirs - mine >= margin[field.dataset.kind], exact: theirs - mine >= 0 };
-    });
-    const sm = check('smallMedium'), lg = check('large');
-    let pick, why;
-    if (sm.every((d) => d.ok)) { pick = 'S/M'; why = 'S/M gives you enough room, even after washing.'; }
-    else if (sm.every((d) => d.exact)) { pick = 'L'; why = 'S/M matches your measurements almost exactly, so it may feel tight after washing. L keeps the relaxed fit.'; }
-    else { pick = 'L'; why = lg.every((d) => d.ok) ? 'S/M is smaller than your garment. L fits your measurements with room to spare.' : 'L is our biggest size. It is still a little smaller than your garment, so it will fit closer than what you wear now.'; }
-    const height = heightField?.valueAsNumber;
-    if (pick === 'S/M' && height >= 175) { pick = 'L'; why = 'Your measurements fit S/M, but at ' + height + ' cm we recommend L for enough length after washing.'; }
-    const detail = (pick === 'S/M' ? sm : lg).map((d) => d.label + ': ' + d.theirs + ' cm (yours ' + d.mine + ' cm)').join(' · ');
-    result.replaceChildren('Recommended size: ' + pick + '. ' + why);
-    const small = document.createElement('small'); small.textContent = pick + ' ' + detail; result.append(small);
+    const height = heightField.valueAsNumber, weight = weightField.valueAsNumber;
+    const large = height >= limit.height || weight >= limit.weight;
+    result.textContent = large
+      ? 'Recommended size: L. It gives you the relaxed fit at ' + height + ' cm · ' + weight + ' kg.'
+      : 'Recommended size: S/M. It gives you the relaxed fit at ' + height + ' cm · ' + weight + ' kg.';
   });
 }
 const offerClock = document.querySelector('[data-offer-clock]');

@@ -1,7 +1,17 @@
 ---
+import { env } from 'cloudflare:workers';
 import { mediaUrl, money } from '../lib/content.js';
+import { shippingRates } from '../lib/checkout.js';
+import { cardReady } from '../lib/paymob.js';
+import { depositSplit, preorderShipping } from '../lib/preorder-deposit.js';
 import Notice from './Notice.astro';
 const { product } = Astro.props;
+const rates = await shippingRates(env.DB);
+const price = product.variants[0]?.price ?? 0;
+const flatRate = rates.length && rates.every((rate) => rate.amount === rates[0].amount) ? rates[0].amount : null;
+const { deposit } = depositSplit(price, 0);
+const rest = price - deposit;
+const ready = cardReady(env) && product.variants.length > 0 && rates.length > 0;
 ---
 <section class="drop-detail" id="DropDetail" aria-label="Pre-order product details">
   <a href="/" class="drop-back">← ALL ITEMS</a>
@@ -12,21 +22,48 @@ const { product } = Astro.props;
     <div class="drop-detail-copy">
       <span class="drop-badge">PRE-ORDER</span>
       <h1>{product.title}</h1>
-      <div class="drop-detail-price">{money(product.variants[0]?.price, true)}</div>
-      <p>Free registration. No payment is required. We’ll contact you when your item is ready.</p>
-      <Notice success={Astro.url.searchParams.has('registered') ? 'Your pre-order interest is registered.' : null} />
-      <form method="post" action="/api/preorder" id="DropPreorderForm" class="drop-form">
+      <div class="drop-detail-price">{money(price, true)}</div>
+      <dl class="preorder-terms">
+        <div><dt>Deposit today</dt><dd>{money(deposit, true)}</dd></div>
+        <div><dt>Pay on delivery</dt><dd>{money(rest, true)} + delivery{flatRate !== null && ' (' + money(flatRate, true) + ')'}</dd></div>
+        <div><dt>Shipping</dt><dd>{preorderShipping.en}</dd></div>
+      </dl>
+      <Notice />
+      {ready ? <form method="post" action="/api/preorder" id="DropPreorderForm" class="drop-form">
         <input type="hidden" name="product" value={product.handle} />
-        <label>Full name <input name="name" autocomplete="name" maxlength="100" required /></label>
-        <label>Email address <input type="email" name="email" autocomplete="email" maxlength="254" required /></label>
-        <label>WhatsApp phone number <input type="tel" name="phone" autocomplete="tel" maxlength="24" required /></label>
-        <fieldset><legend>Selected size</legend>
-          {product.variants.map((variant) => <label><input type="radio" name="variant" value={variant.id} required /> {variant.title}</label>)}
+        <fieldset><legend>Size</legend>
+          {product.variants.map((variant, index) => <label><input type="radio" name="variant" value={variant.id} required checked={index === 0} /> {variant.title}</label>)}
         </fieldset>
-        <label class="drop-consent"><input type="checkbox" name="consent" required /> I agree to receive email and WhatsApp updates about this pre-order.</label>
-        <button class="btn" type="submit" disabled={!product.variants.length}>PRE-ORDER — NO PAYMENT REQUIRED</button>
-        <p class="drop-form-note">Registration only. No checkout or payment.</p>
-      </form>
+        <label>Full name <input name="name" autocomplete="name" maxlength="100" required /></label>
+        <label>Email <input type="email" name="email" autocomplete="email" maxlength="254" required /></label>
+        <label>Phone <input type="tel" name="phone" autocomplete="tel" maxlength="24" required /></label>
+        <label>Street <input name="street" autocomplete="address-line1" maxlength="200" required placeholder="e.g. 14 Fouad Street" /></label>
+        <div class="preorder-row">
+          <label>Building <input name="building" autocomplete="address-line2" maxlength="40" required /></label>
+          <label>Apartment <input name="apartment" maxlength="40" placeholder="Optional" /></label>
+        </div>
+        <div class="preorder-row">
+          <label>City / area <input name="city" autocomplete="address-level2" maxlength="100" required placeholder="e.g. Nasr City" /></label>
+          <label>Governorate
+            <select name="governorate" autocomplete="address-level1" required>
+              <option value="">Choose</option>
+              {rates.map((rate) => <option value={rate.code}>{rate.label}{flatRate === null && ' · ' + money(rate.amount, true)}</option>)}
+            </select>
+          </label>
+        </div>
+        <label class="drop-consent"><input type="checkbox" name="consent" required /> I understand the {money(deposit, true)} deposit reserves my piece and the rest is paid on delivery.</label>
+        <button class="btn" type="submit">PAY {money(deposit, true)} DEPOSIT</button>
+        <p class="drop-form-note">Secure card payment by Paymob.</p>
+      </form> : <p>Pre-orders open soon.</p>}
     </div>
   </div>
 </section>
+
+<style>
+  .preorder-terms { margin: 0 0 8px; border-top: 1px solid #e3e5e9; }
+  .preorder-terms div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid #e3e5e9; font-size: 14px; }
+  .preorder-terms dt { color: #5a6478; }
+  .preorder-terms dd { margin: 0; text-align: right; color: #0b1830; }
+  .preorder-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .preorder-row label { display: grid; gap: 6px; font-size: 12px; letter-spacing: .03em; }
+</style>

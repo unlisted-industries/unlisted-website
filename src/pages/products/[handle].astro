@@ -25,8 +25,8 @@ const chart = straightLegSweats ? '/theme/catalog/straight-leg-size-chart.webp' 
   {!product ? <section class="page"><h1 class="page-title">PRODUCT NOT FOUND</h1><p><a href="/">Back to the collection</a></p></section>
     : product.preorder ? <section class="page" style="max-width:900px;margin:auto;text-align:center;padding:70px 18px">
       <h1 class="page-title">{product.title}</h1>
-      <p class="policy-note">{money(variant?.price)} · Free pre-order registration. No payment required.</p>
-      <a class="btn" style="max-width:390px;margin:24px auto" href={'/?preorder=' + product.handle}>PRE-ORDER — NO PAYMENT REQUIRED</a>
+      <p class="policy-note">{money(variant?.price)} · Pre-order with a 450 EGP deposit. Rest paid on delivery.</p>
+      <a class="btn" style="max-width:390px;margin:24px auto" href={'/?preorder=' + product.handle}>PRE-ORDER NOW</a>
     </section>
     : <section class="unl-product" aria-label={product.title}>
       <div class="unl-product-images" aria-label="Product photos">
