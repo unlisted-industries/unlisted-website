@@ -8,6 +8,7 @@ import { checkoutInput, checkoutReady, placeOrder, sendReceipt } from '../../lib
 import { formData, formError, quantityValue, seeOther, StoreError, textValue, withStatus } from '../../lib/http.js';
 import { cardReady, walletReady, startPayment } from '../../lib/paymob.js';
 import { isToken } from '../../lib/db.js';
+import { saveOrderContext, sendOrderPurchase } from '../../lib/meta-capi.js';
 
 export async function POST(context) {
   try {
@@ -33,11 +34,12 @@ export async function POST(context) {
     });
     const campaign=context.cookies.get('unlisted_campaign')?.value;
     if(created&&visitor&&/^\d{1,30}$/.test(campaign||'')){try{await env.DB.prepare("INSERT OR IGNORE INTO finance_order_attribution(source,order_id,campaign_id) VALUES('website',?,?)").bind(order.id,campaign).run();}catch{console.error('Order attribution was not saved');}}
+    if (created) await saveOrderContext(env, context, order.id);
     const orderPath = '/orders/' + order.id;
     // The durable outbox is committed with the order. Delivery failures never undo an order.
     await deliverOrderNotifications(env, order.id).catch(() => console.error('Order notification remains queued'));
     if (order.payment_method === 'cod') {
-      if (created) await sendReceipt(env, order, context.url.origin);
+      if (created) { await sendReceipt(env, order, context.url.origin); await sendOrderPurchase(env, order); }
       return seeOther(orderPath);
     }
     if (order.payment_status !== 'pending') return seeOther(orderPath);

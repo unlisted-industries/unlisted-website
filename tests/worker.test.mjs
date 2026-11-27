@@ -168,7 +168,7 @@ test('owner sign-in is allowlisted and link consumption is single-use', async ()
 
 test('the owner workspace keeps its sections private and links to live inventory', async () => {
   const guest = browser();
-  const sections = ['website', 'inventory', 'analytics', 'online-store', 'finance', 'marketing', 'automations'];
+  const sections = ['conversion', 'inventory', 'analytics', 'online-store', 'finance', 'marketing', 'automations'];
   for (const section of sections) {
     const path = '/admin/' + section;
     assert.equal((await guest(path)).headers.get('Location'), '/admin/login');
@@ -1206,7 +1206,7 @@ test('orders group connects with the cha-ching sound and receives order alerts w
   const sentNow = telegram.slice(before);
   assert.equal(sentNow[0].method, 'sendAudio');
   assert.equal(sentNow[0].chat_id, -100777);
-  assert.match(sentNow[0].audio, /\/theme\/cha-ching\.mp3\?v=2$/);
+  assert.match(sentNow[0].audio, /\/theme\/cha-ching\.mp3\?v=3$/);
   const web = browser();
   await db.prepare("UPDATE variants SET inventory=5,price=60000 WHERE id='v'").run();
   const input = await customerCheckout(web, 'chaching@example.invalid', 'cod', '');
@@ -1233,4 +1233,25 @@ test('finance stock picker shows each stock with revenue and break-even; marketi
   assert.match(pr.headers.get('Location'), /\/admin\/marketing\?saved=1/);
   assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id='v'").first('inventory'), 2);
   assert.match(await (await admin('/admin/marketing')).text(), /@fixture[\s\S]*LE 250\.00|@fixture[\s\S]*250/);
+});
+
+test('overview links to conversion details; website duplicate removed; orders carry the Meta Purchase event', async () => {
+  admin = browser(); await admin('/admin/session', { action: 'password', password: ownerPassword });
+  const home = await (await admin('/admin')).text();
+  assert.match(home, /CONVERSION RATE/);
+  assert.match(home, /href="\/admin\/conversion\?days=30"/);
+  assert.doesNotMatch(home, /href="\/admin\/website"/);
+  assert.equal((await admin('/admin/website')).status, 302);
+  for (const days of ['1', '30', 'all']) {
+    const page = await admin('/admin/conversion?days=' + days);
+    assert.equal(page.status, 200);
+    assert.match(await page.text(), /Website visitors[\s\S]*Visitors who ordered/);
+  }
+  const web = browser();
+  await db.prepare("UPDATE variants SET inventory=5,price=60000 WHERE id='v'").run();
+  const input = await customerCheckout(web, 'pixel@example.invalid', 'cod', '');
+  const placed = await web('/api/checkout', input);
+  const page = await (await web(placed.headers.get('Location'))).text();
+  assert.match(page, /data-pixel-event="Purchase" data-event-id="order-[a-f0-9]{32}" data-value="680\.00"/);
+  assert.match(page, /pixel-events\.js/);
 });

@@ -14,7 +14,8 @@ import { ensureFinance } from '../../lib/finance-schema.js';
 const reportUrl = new URL('/admin/analytics?days=all', Astro.url);
 const range = reportingRange(reportUrl);
 await ensureFinance(env.DB);
-const [metrics, settings] = await Promise.all([dashboard(env.DB, range), getSettings(Astro, env.DB)]);
+const [metrics, settings, month] = await Promise.all([dashboard(env.DB, range), getSettings(Astro, env.DB), dashboard(env.DB, 30)]);
+const conversion = month.visitors ? (100 * month.converted / month.visitors).toFixed(2) + '%' : '—';
 const activity = await liveVisitors(env.DB, settings.analytics_enabled).catch(() => ({ enabled: Boolean(settings.analytics_enabled), available: false, visitors: 0, countries: [], unknown: 0 }));
 const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', hour: 'numeric', hourCycle: 'h23' }).format(new Date()));
 const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
@@ -34,6 +35,11 @@ const poster = mediaUrl(settings.hero_poster);
     <SalesChart />
     <LiveVisitors activity={activity} />
   </div>
+  <a class="panel home-conversion" href="/admin/conversion?days=30">
+    <span><small>CONVERSION RATE · LAST 30 DAYS</small><strong>{conversion}</strong></span>
+    <span>{month.converted} of {month.visitors.toLocaleString('en-GB')} visitors ordered</span>
+    <span class="home-conversion-more">Details →</span>
+  </a>
   <section class="panel home-next"><h2>Next up</h2><nav class="home-actions" aria-label="Store actions">
     {tasks.map(([icon, label, count, link]) => <a href={link}><Icon name={icon} />{label}<span>{count}</span></a>)}
   </nav></section>
@@ -55,5 +61,10 @@ const poster = mediaUrl(settings.hero_poster);
   .home-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 18px; align-items: stretch; margin-bottom: 18px; }
   .home-top :global(.sales-chart) { margin-bottom: 0; }
   .home-next, .home-store { margin-bottom: 18px; }
+  .home-conversion { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; padding: 18px 22px; color: inherit; text-decoration: none; }
+  .home-conversion small { display: block; font-size: 11px; letter-spacing: .06em; color: #6b7280; }
+  .home-conversion strong { font-size: 28px; font-variant-numeric: tabular-nums; }
+  .home-conversion:hover { border-color: #146a4b; }
+  .home-conversion-more { font-weight: 600; color: #146a4b; }
   @media (max-width: 900px) { .home-top { grid-template-columns: 1fr; } }
 </style>

@@ -39,7 +39,7 @@ export async function connectOrdersChat(env, origin) {
   await env.DB.prepare(`INSERT INTO telegram_settings (key, value) VALUES ('orders_chat', ?)
     ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=unixepoch()`).bind(String(chat.id)).run();
   await telegram(env, 'sendAudio', {
-    chat_id: chat.id, audio: new URL('/theme/cha-ching.mp3?v=2', origin).href, title: 'Cha-ching', performer: 'UNLISTED',
+    chat_id: chat.id, audio: new URL('/theme/cha-ching.mp3?v=3', origin).href, title: 'Cha-ching', performer: 'UNLISTED',
     caption: 'New orders will arrive in this group.\n\nSet the sound:\n1. Long-press this audio → Save for notifications.\n2. Tap the group name → Notifications → Sound → Cha-ching.',
   });
   await telegram(env, 'sendMessage', { chat_id: chat.id, text: 'UNLISTED · TEST ORDER ALERT 💰\nThis is how new orders will sound.' });
