@@ -70,6 +70,8 @@ before(async () => {
         const data=await request.json();providerRefunds.push(data);if(refundTimeout)throw new Error('Fixture timeout');
         return Response.json({id:900000+providerRefunds.length,success:true,pending:false,amount_cents:data.amount_cents});
       }
+      if(url.href==='https://app.bosta.co/api/v2/cities') return Response.json({success:true,data:{list:[{_id:'fixture-cairo',name:'Cairo',nameAr:'القاهرة'},{_id:'fixture-alex',name:'Alexandria'},{_id:'fixture-test',name:'Test city'}]}});
+      if(url.href.startsWith('https://app.bosta.co/api/v2/cities/')) return Response.json({success:true,data:[{zoneName:'Fixture zone',districts:[{districtId:'fixture-district',districtName:'Nasr City'}]}]});
       if(url.href==='https://app.bosta.co/api/v2/deliveries?apiVersion=1') {
         providerBookings.push(await request.json());return Response.json({success:true,data:{_id:'fixture-booking-'+providerBookings.length,trackingNumber:'fixture-track-'+providerBookings.length,state:{value:'Pickup requested'}}});
       }
