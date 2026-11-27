@@ -18,6 +18,6 @@ export function offerPrice(handle, price, now = Date.now()) {
 export function offerDiscountLabel(original, current) {
   if (current == null || current >= original || original <= 0) return '';
   const percentage = Math.floor((original - current) * 100 / original);
-  if (percentage === 18 || percentage === 19) return '≈20% OFF';
+  if (percentage === 18 || percentage === 19) return '20% OFF';
   return percentage ? percentage + '% OFF' : '';
 }
