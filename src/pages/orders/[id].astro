@@ -1,4 +1,5 @@
 ---
+import { orderNo } from '../../lib/order-number.js';
 import { env } from 'cloudflare:workers';
 import Store from '../../layouts/Store.astro';
 import Notice from '../../components/Notice.astro';
@@ -13,7 +14,7 @@ if (!order) Astro.response.status = 404;
 ---
 <Store title="Order status" noIndex>
   <section class="store-checkout">
-    <h1>{order ? 'ORDER ' + order.id.slice(0, 8).toUpperCase() : 'ORDER NOT FOUND'}</h1>
+    <h1>{order ? 'ORDER ' + orderNo(order) : 'ORDER NOT FOUND'}</h1>
     {!Astro.url.searchParams.has('return-request') && <Notice />}
     {order ? <>
       <p>{displayDate(order.created_at)} · {order.status} · {method.toUpperCase()}</p>

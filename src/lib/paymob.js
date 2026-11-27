@@ -1,4 +1,5 @@
 import { all, statements, unixNow } from './db.js';
+import { orderNo } from './order-number.js';
 import { StoreError } from './http.js';
 
 const gateway = 'https://accept.paymob.com';
@@ -69,7 +70,7 @@ export async function createPaymobIntention(env, order, remaining, callbacks = {
       amount: order.total,
       currency: order.currency,
       payment_methods: paymentIntegrationIds(env, method),
-      items: lines.length ? paymentSummaryItems(order, lines) : [{ name: 'UNLISTED™ order ' + order.id.slice(0, 8), amount: order.total, description: 'Clothing order', quantity: 1 }],
+      items: lines.length ? paymentSummaryItems(order, lines) : [{ name: 'UNLISTED™ order ' + orderNo(order), amount: order.total, description: 'Clothing order', quantity: 1 }],
       billing_data: {
         first_name: first, last_name: last.join(' ') || first, street: order.address, building: 'NA',
         floor: 'NA', apartment: 'NA', phone_number: order.phone, email: order.email,

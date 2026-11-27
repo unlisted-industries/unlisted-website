@@ -1,4 +1,5 @@
 import { all, isToken, makeToken, sha256, statements, unixNow } from './db.js';
+import { orderNo } from './order-number.js';
 import { getCart, cartId } from './cart.js';
 import { currentUser, sendEmail } from './auth.js';
 import { emailValue, StoreError, textValue } from './http.js';
@@ -96,8 +97,9 @@ export async function placeOrder(db, { id, key, input, expected, user, visitor }
     await statements(db, [
       [`INSERT INTO orders (id, checkout_key, request_digest, cart_id, cart_version, customer_id,
         visitor_id, visitor_day, email, name, phone, address, city, shipping_code, shipping_label,
-        currency, subtotal, shipping, discount, discount_code, total, payment_method, payment_status, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'EGP', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        currency, subtotal, shipping, discount, discount_code, total, payment_method, payment_status, expires_at, number)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'EGP', ?, ?, ?, ?, ?, ?, ?, ?,
+          (SELECT coalesce(max(number), 0) + 1 FROM orders))`,
       orderId, key, requestDigest, id, totals.version, user?.email === input.email ? user.id : null,
       visitor?.id ?? null, visitor?.day ?? null, input.email, input.name, input.phone, input.address,
       input.city, totals.rate.code, totals.rate.label, totals.subtotal, totals.rate.amount, totals.discount,
@@ -150,10 +152,12 @@ export async function orderSets(db, id) {
 export async function sendReceipt(env, order, origin) {
   return sendEmail(env, {
     to: order.email,
-    subject: 'UNLISTED™ order ' + order.id.slice(0, 8).toUpperCase(),
+    subject: 'UNLISTED™ order ' + orderNo(order),
     text: 'Thank you for your order. Total: ' + money(order.total, true) +
       (order.payment_method === 'cod' ? ' · Cash on delivery.' : ' · Paid.') +
-      '\n\nSign in with this email to view your order:\n' + new URL('/account', origin),
+      '\n\nYour order number is ' + orderNo(order) + '.' +
+      '\n\nView your order (no account needed, just this email):\n' + new URL('/account', origin) +
+      '\n\nReturns & exchanges:\n' + new URL('/returns', origin),
     key: 'unlisted-order-' + order.id,
   });
 }

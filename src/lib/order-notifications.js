@@ -1,4 +1,5 @@
 import { all } from './db.js';
+import { orderNo } from './order-number.js';
 import { money } from './content.js';
 
 export function telegramReady(env) {
@@ -8,7 +9,7 @@ export function telegramReady(env) {
 export function orderNotificationText(order, lines, origin) {
   const text = (value, max) => String(value ?? '').replace(/[\u0000-\u001f]/g, ' ').slice(0,max);
   const items = lines.map((line) => `${line.quantity} × ${text(line.product_title,100)} · ${text(line.variant_title,60)} · ${money(line.price*line.quantity,true)}`);
-  const heading = `UNLISTED · NEW ORDER #${order.id.slice(0,8).toUpperCase()}`;
+  const heading = `UNLISTED · NEW ORDER ${orderNo(order)}`;
   const details = [heading, `${text(order.name,100)} · ${text(order.email,254)}`, text(order.phone,24),
     `${text(order.address,350)}, ${text(order.city,100)}, ${text(order.shipping_label,100)}`,
     `Total: ${money(order.total,true)}`, `Payment: ${order.chosen_method ?? order.payment_method} · ${order.payment_status}`];
