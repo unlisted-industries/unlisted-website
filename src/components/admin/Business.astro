@@ -4,12 +4,23 @@ import { dashboard } from '../../lib/admin.js';
 import { reportingRange } from '../../lib/reporting.js';
 import { money } from '../../lib/content.js';
 import Metrics from './Metrics.astro';
+import { rmaConnections } from '../../lib/rma-providers.js';
+import { telegramReady } from '../../lib/order-notifications.js';
+import { emailReady } from '../../lib/auth.js';
 import ReportingPeriod from './ReportingPeriod.astro';
 const { section, title } = Astro.props;
 const finance = section === 'finance';
 const range = reportingRange(Astro.url);
 const metrics = section === 'automations' ? null : await dashboard(env.DB, range);
 const conversion = metrics?.visitors ? (100 * metrics.converted / metrics.visitors).toFixed(1) + '%' : '—';
+const auto = section === 'automations' ? rmaConnections(env) : null;
+const flows = auto ? [
+  ['Telegram order alerts', telegramReady(env), 'New orders, low stock and cash reminders to your phone.', 'Add TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID in Cloudflare.'],
+  ['Customer emails', emailReady(env), 'Order receipts, sign-in links and return updates.', 'Add RESEND_API_KEY in Cloudflare.'],
+  ['Bosta return pickups', auto.bosta, 'Book return pickups from Returns & exchanges. Tracking updates every 15 minutes.', 'Add BOSTA_API_KEY in Cloudflare.'],
+  ['ShipBlu return pickups', auto.shipblu, 'Book return pickups with ShipBlu.', 'Add SHIPBLU_API_KEY and SHIPBLU_PACKAGE_SIZE in Cloudflare.'],
+  ['Paymob card refunds', auto.paymob, 'Refund card payments from Returns & exchanges.', 'Set PAYMOB_RMA_REFUNDS_ENABLED to true in Cloudflare.'],
+] : [];
 const compare = (key) => metrics?.previous ? { current: metrics[key], previous: metrics.previous[key] } : null;
 ---
 <div class="admin-heading">
@@ -40,6 +51,10 @@ const compare = (key) => metrics?.previous ? { current: metrics[key], previous: 
     <div class="admin-links"><a class="button primary" href="/admin/discounts">Manage discounts</a><a class="button" href="/admin/analytics">View store analytics</a></div>
   </section>
 </> : <>
-  <section class="panel"><h2>Business workflows</h2><p class="muted">No workflows configured.</p></section>
+  <section class="panel"><h2>Connections</h2><p class="muted">Live status. Checked each time this page loads.</p>
+    <div class="table-wrap"><table><thead><tr><th>Automation</th><th>Status</th><th>What it does</th></tr></thead><tbody>
+    {flows.map(([name, on, what, fix]) => <tr><td><strong>{name}</strong></td><td><span class="pill">{on ? 'On' : 'Off'}</span></td><td>{what}{!on && <><br /><small class="muted">To turn on: {fix}</small></>}</td></tr>)}
+    </tbody></table></div>
+  </section>
   <section class="panel"><h2>Store maintenance</h2><p>The store automatically clears expired carts and sessions and releases expired checkout reservations.</p></section>
 </>}
