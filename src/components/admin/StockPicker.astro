@@ -1,0 +1,77 @@
+---
+import { money } from '../../lib/content.js';
+const { stocks, selected } = Astro.props;
+const s = stocks.find((x) => x.id === selected) ?? stocks[0];
+const egp = (v) => v === null || v === undefined ? '—' : money(Math.round(v), true);
+const num = (v) => v === null || v === undefined ? '' : (v / 100).toString();
+const m = s?.metrics;
+---
+<section class="stock-wheel-wrap" aria-label="Choose a stock">
+  <div class="stock-wheel" role="tablist">
+    {stocks.map((x) => <a role="tab" href={'/admin/finance?stock=' + encodeURIComponent(x.id) + '#stock'} aria-selected={x.id === s.id ? 'true' : 'false'} class:list={['stock-chip', x.id === s.id && 'is-active']}>
+      <strong>{x.name}</strong>
+      <small>{x.business === 'UNLISTED' ? (x.products.map((p) => p.name).join(' · ') || x.state) : x.business}</small>
+      <span>{egp(x.revenue)} sales</span>
+    </a>)}
+    <a class="stock-chip stock-chip-new" href="#new-stock"><strong>+ New stock</strong><small>Add a new batch</small></a>
+  </div>
+</section>
+
+{s && <section class="fin-panel stock-detail" id="stock">
+  <div class="fin-panel-heading"><h2>{s.name}</h2><span>{s.products.map((p) => p.name).join(' · ')}</span></div>
+  <div class="fin-cards compact">
+    <article class="fin-stat"><span>Paid revenue</span><strong>{egp(s.revenue)}</strong><small>{s.soldPieces} pieces · {s.orders} orders</small></article>
+    <article class="fin-stat"><span>Profit so far</span><strong class:list={[s.profitSoFar < 0 && 'neg']}>{egp(s.profitSoFar)}</strong><small>Sales − stock cost − ads − PR</small></article>
+    <article class="fin-stat"><span>Profit if all sells</span><strong>{m ? egp(m.profit) : '—'}</strong><small>{m ? 'At ' + egp(s.price) + ' each' : 'Add price and pieces'}</small></article>
+    <article class="fin-stat"><span>Break-even</span><strong>{m ? (m.canBreakEven ? m.breakEvenUnits + ' sales' : 'Not possible') : '—'}</strong><small>{m && m.canBreakEven ? Math.max(0, m.breakEvenUnits - s.soldPieces) + ' more to go' : 'Sales to get your money back'}</small></article>
+    <article class="fin-stat"><span>Break-even ROAS</span><strong>{m && m.breakEvenROAS !== null ? m.breakEvenROAS.toFixed(2) + '×' : '—'}</strong><small>Meta ROAS must beat this</small></article>
+    <article class="fin-stat"><span>Max CPA</span><strong>{m ? egp(m.maxCPA) : '—'}</strong><small>Most you can pay for one sale</small></article>
+  </div>
+  <dl>
+    <div><dt>Pieces</dt><dd>{s.pieces ?? '—'} total · {s.soldPieces} sold · {s.prUnits} PR · {s.left ?? '—'} left</dd></div>
+    <div><dt>Stock cost</dt><dd>{egp(s.cost)}{s.estimated && ' (includes estimates)'}</dd></div>
+    <div><dt>Ads</dt><dd>{egp(s.ads)}</dd></div>
+    <div><dt>PR paid</dt><dd>{egp(s.prCost)}</dd></div>
+  </dl>
+  <details><summary>Edit price, pieces & ads</summary>
+    <form method="post" action="/admin/stock-action" class="fin-form">
+      <input type="hidden" name="op" value="stock_settings" /><input type="hidden" name="project_id" value={s.id} />
+      <label><span>Selling price (EGP)</span><input name="price" type="number" min="0" step=".01" value={num(s.price)} /></label>
+      <label><span>Pieces for sale</span><input name="pieces" type="number" min="1" step="1" value={s.pieces ?? ''} /></label>
+      <label><span>Ads spent (EGP)</span><input name="ads" type="number" min="0" step=".01" value={num(s.ads)} /></label>
+      <button>Save</button>
+    </form>
+  </details>
+  <details><summary>Costs ({s.costs.length})</summary>
+    <ul class="stock-costs">{s.costs.map((c) => <li><span>{c.description}</span><span>{egp(c.amount)} <small>{c.state}</small></span></li>)}</ul>
+    <form method="post" action="/admin/stock-action" class="fin-form">
+      <input type="hidden" name="op" value="stock_cost" /><input type="hidden" name="project_id" value={s.id} />
+      <label><span>What</span><input name="description" maxlength="120" required placeholder="e.g. Packaging" /></label>
+      <label><span>Amount (EGP)</span><input name="amount" type="number" min="0" step=".01" required /></label>
+      <label><span>Status</span><select name="state"><option value="paid">Paid</option><option value="unpaid">Not paid yet</option></select></label>
+      <button>Add cost</button>
+    </form>
+  </details>
+</section>}
+
+<details class="fin-panel" id="new-stock"><summary>+ New stock</summary>
+  <form method="post" action="/admin/stock-action" class="fin-form">
+    <input type="hidden" name="op" value="stock_new" />
+    <label><span>Stock name</span><input name="name" maxlength="80" required placeholder="e.g. Stock 4 · Winter tees" /></label>
+    <button>Create</button>
+  </form>
+</details>
+
+<style>
+  .stock-wheel-wrap { margin: 0 -4px 16px; }
+  .stock-wheel { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 4px 4px 10px; -webkit-overflow-scrolling: touch; }
+  .stock-chip { flex: 0 0 min(240px, 72vw); scroll-snap-align: start; display: grid; gap: 3px; padding: 14px 16px; border: 1px solid #e1e6e2; border-radius: 14px; background: #fff; color: inherit; text-decoration: none; }
+  .stock-chip strong { font-size: 15px; } .stock-chip small { color: #6b7280; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .stock-chip span { font-size: 13px; font-weight: 600; margin-top: 4px; }
+  .stock-chip.is-active { border-color: #146a4b; box-shadow: 0 0 0 2px #146a4b22; background: #f4faf6; }
+  .stock-chip-new { border-style: dashed; align-content: center; }
+  .stock-detail strong.neg { color: #c8102e; }
+  .stock-costs { list-style: none; padding: 0; margin: 8px 0 14px; }
+  .stock-costs li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid #eef1ee; font-size: 13px; }
+  .stock-costs small { color: #6b7280; }
+</style>

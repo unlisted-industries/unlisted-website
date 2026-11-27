@@ -71,12 +71,12 @@ const keep = (extra) => { const u = new URLSearchParams(q); for (const [k, v] of
 ---
 <section class="panel sales-chart" aria-labelledby="sales-chart-title">
   <form class="sc-controls" method="get">
-    <select name="range" onchange="this.form.querySelector('.sc-custom').hidden=this.value!=='custom';if(this.value!=='custom')this.form.submit()">
+    <select name="range" data-sc-range>
       {ranges.map(([k, label]) => <option value={k} selected={range === k}>{label}</option>)}
       <option value="custom" selected={range === 'custom'}>Custom dates…</option>
     </select>
     <span class="sc-custom" hidden={range !== 'custom'}><input type="date" name="from" value={iso(start)} /> → <input type="date" name="to" value={iso(end)} /><button class="button">Apply</button></span>
-    <select name="stock" onchange="this.form.submit()">
+    <select name="stock" data-sc-auto>
       <option value="">All sales</option>
       {collections.map((c) => <option value={c.name} selected={stock === c.name}>{c.name}</option>)}
     </select>
@@ -97,21 +97,7 @@ const keep = (extra) => { const u = new URLSearchParams(q); for (const [k, v] of
   </div>
   <p class="sc-legend"><span class="sc-key"></span>{fmtY(start)} – {fmtY(end)}{compare && <><span class="sc-key prev"></span>{fmtY(prevStart)} – {fmtY(start - 1)}</>}</p>
 </section>
-<script is:inline>
-  document.querySelectorAll('.sc-wrap').forEach((wrap) => {
-    const data = JSON.parse(wrap.dataset.sc), svg = wrap.querySelector('svg'), tip = wrap.querySelector('.sc-tip');
-    const cursor = svg.querySelector('.sc-cursor'), dot = svg.querySelector('.sc-dot');
-    const move = (e) => {
-      const r = svg.getBoundingClientRect(), vx = (e.clientX - r.left) * svg.viewBox.baseVal.width / r.width;
-      let best = data[0]; for (const d of data) if (Math.abs(d.x - vx) < Math.abs(best.x - vx)) best = d;
-      cursor.setAttribute('x1', best.x); cursor.setAttribute('x2', best.x); dot.setAttribute('cx', best.x); dot.setAttribute('cy', best.y);
-      tip.hidden = false; tip.innerHTML = '<small>' + best.label + '</small><strong>' + best.v + '</strong>' + (best.p ? '<small>Previous: ' + best.p + '</small>' : '');
-      const px = best.x / svg.viewBox.baseVal.width * r.width; tip.style.left = Math.min(Math.max(px, 70), r.width - 70) + 'px';
-    };
-    svg.addEventListener('pointermove', move);
-    svg.addEventListener('pointerleave', () => { tip.hidden = true; dot.setAttribute('cx', -10); cursor.setAttribute('x1', -10); cursor.setAttribute('x2', -10); });
-  });
-</script>
+<script is:inline src="/admin/sales-chart.js?v=1" defer></script>
 <style>
   .sales-chart { margin-bottom: 18px; }
   .sc-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
