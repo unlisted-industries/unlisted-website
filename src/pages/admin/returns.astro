@@ -5,7 +5,7 @@ import Legacy from '../../components/admin/Returns.astro';
 import {currentUser} from '../../lib/auth.js';
 import {all} from '../../lib/db.js';
 import {caseDetail,ensureRma,policy} from '../../lib/rma.js';
-import {rmaConnections} from '../../lib/rma-providers.js';
+import {rmaConnections,bostaDistricts} from '../../lib/rma-providers.js';
 import {rmaStates,reasons} from '../../lib/rma-math.js';
 import {money,displayDate} from '../../lib/content.js';
 const user=await currentUser(env,Astro,'admin');if(!user)return Astro.redirect('/admin/login',303);
@@ -24,6 +24,7 @@ const kinds={refund:t('Refund','استرداد'),exchange:t('Exchange','استب
 const elig={eligible:t('Within return window','ضمن مدة الاسترجاع'),delivery_review:t('Delivery date unknown — check before approving','تاريخ التسليم غير معروف'),outside_window:t('Outside return window','خارج مدة الاسترجاع'),evidence_review:t('Order amounts need checking','يلزم مراجعة المبالغ'),customer_review:t('Waiting for customer to confirm','بانتظار تأكيد العميل')};
 const hints={requested:t('The customer asked for this. Approve or decline it.','العميل طلب ذلك. وافق أو ارفض.'),approved:t('Book the Bosta pickup below. When the item reaches you, check it and press “Item arrived”.','احجز استلام بوسطة بالأسفل. عند وصول المنتج افحصه واضغط "وصل المنتج".'),received:t('Send the refund (or the new size), then close the return.','أرسل المبلغ أو المقاس الجديد ثم أغلق الطلب.')};
 const connected=['bosta','shipblu'].filter(k=>connections[k]);
+const bd=c&&connections.bosta&&(c.state==='approved'||c.kind==='exchange'&&c.state==='received')?await bostaDistricts(env,c.order).catch(e=>({error:String(e?.message||e),options:[]})):null;
 const actions=c?({requested:[['approve',t('Approve','موافقة')],['decline',t('Decline','رفض')]],approved:[['receive',t('Item arrived','وصل المنتج')],['cancel',t('Cancel return','إلغاء الطلب')]],received:[['complete',t('Close return','إغلاق الطلب')]]}[c.state]||[]):[];
 ---
 <Admin title="Returns & exchanges" user={user}>
@@ -53,7 +54,8 @@ const actions=c?({requested:[['approve',t('Approve','موافقة')],['decline',
     {c.state==='approved'?<input name="direction" value="return" type="hidden"/>:<input name="direction" value="replacement" type="hidden"/>}
     <p>{c.state==='approved'?t('The courier collects the item from the customer and brings it back to you. Customer pays nothing; the courier charges your account.','شركة الشحن تستلم المنتج من العميل وتعيده لك. العميل لا يدفع شيئًا.'):t('The courier delivers the new size to the customer.','شركة الشحن توصل المقاس الجديد للعميل.')}</p>
     {connected.length>1?<label>{t('Courier','شركة الشحن')}<select name="provider">{connected.map(k=><option value={k}>{k==='bosta'?'Bosta':'ShipBlu'}</option>)}</select></label>:<input name="provider" value={connected[0]||'bosta'} type="hidden"/>}
-    {connections.shipblu&&<label>{t('ShipBlu zone number (ShipBlu only)','رقم منطقة ShipBlu')}<input name="zone" maxlength="100"/></label>}
+    {bd&&bd.options.length>0?<label>{t('Bosta area (district)','المنطقة في بوسطة')}<select name="zone" required><option value="">{t('Choose the customer’s area…','اختر منطقة العميل…')}</option>{bd.options.map(x=><option value={x.id} selected={x.id===bd.match}>{x.label}</option>)}</select><small>{bd.cityName} · {t('Customer wrote:','العميل كتب:')} {c.order.district||c.order.city}</small></label>:bd&&<p class="muted">{bd.error||t('Bosta returned no areas for this city.','بوسطة لم ترجع مناطق لهذه المدينة.')}</p>}
+    {connections.shipblu&&!bd&&<label>{t('ShipBlu zone number (ShipBlu only)','رقم منطقة ShipBlu')}<input name="zone" maxlength="100"/></label>}
     <button class="button primary" disabled={!connected.length}>{c.state==='approved'?t('Book Bosta pickup','احجز استلام بوسطة'):t('Send new size with Bosta','أرسل المقاس الجديد مع بوسطة')}</button>{!connected.length&&<small>{t('Bosta is not connected. See Automations.','بوسطة غير متصلة.')}</small>}</form>}
    <details><summary>{t('Booked it yourself in Bosta’s dashboard? Add the tracking number','حجزت من لوحة بوسطة؟ أضف رقم التتبع')}</summary><form class="admin-form" method="post" action="/admin/returns-action"><input name="operation" value="tracking" type="hidden"/><input name="id" value={c.id} type="hidden"/>
     {c.kind==='exchange'?<label>{t('Shipment','الشحنة')}<select name="direction"><option value="return">{t('Pickup from customer','استلام من العميل')}</option><option value="replacement">{t('New size to customer','المقاس الجديد للعميل')}</option></select></label>:<input name="direction" value="return" type="hidden"/>}
