@@ -17,6 +17,7 @@ if (!order) Astro.response.status = 404;
     <h1>{order ? 'ORDER ' + orderNo(order) : 'ORDER NOT FOUND'}</h1>
     {!Astro.url.searchParams.has('return-request') && <Notice />}
     {order ? <>
+      {order.status !== 'cancelled' && (order.payment_method === 'cod' || order.payment_status === 'paid') && <div hidden data-pixel-event="Purchase" data-event-id={'order-' + order.id} data-value={(order.total / 100).toFixed(2)} data-currency="EGP" data-content-ids={lines.map((l) => l.variant_id).join(',')} data-num-items={lines.reduce((n, l) => n + l.quantity, 0)}></div>}
       <p>{displayDate(order.created_at)} · {order.status} · {method.toUpperCase()}</p>
       {order.payment_status === 'pending' && <p>Payment confirmation is pending. This page updates when Paymob verifies the transaction.</p>}
       {order.payment_status === 'review' && <p>Payment is under review. <a href="/pages/contact">Contact us</a> for help.</p>}

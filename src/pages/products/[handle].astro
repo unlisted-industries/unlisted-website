@@ -29,6 +29,7 @@ const chart = straightLegSweats ? '/theme/catalog/straight-leg-size-chart.webp' 
       <a class="btn" style="max-width:390px;margin:24px auto" href={'/?preorder=' + product.handle}>PRE-ORDER NOW</a>
     </section>
     : <section class="unl-product" aria-label={product.title}>
+      {variant && <div hidden data-pixel-event="ViewContent" data-value={(current / 100).toFixed(2)} data-currency="EGP" data-content-ids={product.variants.map((v) => v.id).join(',')}></div>}
       <div class="unl-product-images" aria-label="Product photos">
         {product.images.map((image, index) => <div class="unl-product-image">
           <img src={mediaUrl(image.key)} alt={image.alt} width="1000" height="1333" loading={index ? 'lazy' : 'eager'} />

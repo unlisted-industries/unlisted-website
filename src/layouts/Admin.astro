@@ -57,8 +57,8 @@ const searchable = [
             <a href={'/admin/' + key} class:list={[workspace === key && 'section-active']} aria-current={current === key ? 'page' : undefined}><Icon name={key} /> {label}</a>
           </li>)}
         </ul>
-        {workspace === 'website' && <>
-          <p class="admin-nav-heading website-nav-heading">Website</p>
+        {<>
+          <p class="admin-nav-heading website-nav-heading">Store</p>
           <ul class="admin-nav-list">
             {websiteSections.map(({ key, label, children }) => <li>
               <a href={'/admin/' + key} aria-current={current === key ? 'page' : undefined}><Icon name={key} /> {label}</a>

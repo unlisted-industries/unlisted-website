@@ -4,6 +4,7 @@ import { sendReceipt } from '../../lib/checkout.js';
 import { paymentOrigin, recordCapture, verifyPaymob } from '../../lib/paymob.js';
 import { recordSandboxCapture } from '../../lib/paymob-sandbox.js';
 import { recordDepositCapture } from '../../lib/preorder-deposit.js';
+import { sendOrderPurchase } from '../../lib/meta-capi.js';
 
 export async function POST({ request, url }) {
   if (!request.headers.get('Content-Type')?.toLowerCase().startsWith('application/json')) {
@@ -30,7 +31,7 @@ export async function POST({ request, url }) {
       return new Response(null, { status: 204 });
     }
     const order = await recordCapture(env, message.obj);
-    if (order) await sendReceipt(env, order, paymentOrigin(env) ?? url.origin);
+    if (order) { await sendReceipt(env, order, paymentOrigin(env) ?? url.origin); await sendOrderPurchase(env, order); }
     return new Response(null, { status: 204 });
   } catch (error) {
     return new Response('Callback could not be processed', { status: error instanceof StoreError ? error.status : 503 });

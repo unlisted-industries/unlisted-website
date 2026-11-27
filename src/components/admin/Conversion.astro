@@ -1,0 +1,39 @@
+---
+import { env } from 'cloudflare:workers';
+import Metrics from './Metrics.astro';
+import ReportingPeriod from './ReportingPeriod.astro';
+import { dashboard } from '../../lib/admin.js';
+import { acceptedOrder } from '../../lib/checkout.js';
+import { all } from '../../lib/db.js';
+import { reportingRange, dateRangeLabel } from '../../lib/reporting.js';
+const range = reportingRange(Astro.url);
+const metrics = await dashboard(env.DB, range);
+const rate = (c, v) => v ? 100 * c / v : null;
+const pct = (v) => v === null ? '—' : v.toFixed(2) + '%';
+const compare = (key) => metrics.previous ? { current: metrics[key], previous: metrics.previous[key] } : null;
+// Day by day: unique storefront visitors, and how many of them placed an accepted order that day.
+const days = await all(env.DB.prepare(`SELECT v.day, count(DISTINCT v.visitor_id) AS visitors,
+  (SELECT count(DISTINCT o.visitor_id) FROM orders o WHERE o.visitor_day = v.day AND ${acceptedOrder}
+    AND EXISTS (SELECT 1 FROM visits x WHERE x.visitor_id = o.visitor_id AND x.day = o.visitor_day)) AS converted,
+  (SELECT count(*) FROM orders o WHERE o.visitor_day = v.day AND ${acceptedOrder}) AS orders
+  FROM visits v WHERE v.day >= ? AND v.day < ? GROUP BY v.day ORDER BY v.day DESC LIMIT 120`)
+  .bind(range.current.startDate, range.current.untilDate));
+const trackedOrders = days.reduce((n, d) => n + d.orders, 0);
+---
+<div class="admin-heading"><div><p class="overline">OVERVIEW</p><h1>Conversion rate</h1>
+  <p>{dateRangeLabel(range.current)} · Visitors who placed an order ÷ all visitors.</p></div></div>
+<ReportingPeriod range={range} />
+<Metrics cards={[
+  ['Conversion rate', pct(rate(metrics.converted, metrics.visitors)), 'Visitors who ordered ÷ visitors', metrics.previous ? {
+    current: rate(metrics.converted, metrics.visitors), previous: rate(metrics.previous.converted, metrics.previous.visitors), points: true } : null],
+  ['Website visitors', metrics.visitors.toLocaleString('en-GB'), 'Unique people on your store', compare('visitors')],
+  ['Visitors who ordered', metrics.converted.toLocaleString('en-GB'), 'Placed a COD or paid order', compare('converted')],
+  ['Orders', metrics.sales.toLocaleString('en-GB'), 'Accepted orders in this period', compare('sales')],
+]} />
+<section class="panel"><h2>Day by day</h2>
+  {days.length ? <div class="table-wrap"><table>
+    <thead><tr><th>Day</th><th>Visitors</th><th>Ordered</th><th>Conversion</th></tr></thead>
+    <tbody>{days.map((d) => <tr><td>{d.day}</td><td>{d.visitors}</td><td>{d.converted}</td><td>{pct(rate(d.converted, d.visitors))}</td></tr>)}</tbody>
+  </table></div> : <p class="muted">No visitors in this period yet.</p>}
+  <p class="muted">Counts each person once per day. Bots and people who turn off tracking in their browser aren't counted. {metrics.sales > trackedOrders && (metrics.sales - trackedOrders) + ' order(s) came from people with tracking off.'}</p>
+</section>

@@ -42,6 +42,7 @@ const addressFields = (value) => ({ street: value.street ?? '', building: value.
 ---
 <Store title="Checkout" noIndex>
   <section class="store-checkout">
+    {ready && !review && Astro.request.method === 'GET' && <div hidden data-pixel-event="InitiateCheckout" data-value={(cart.subtotal / 100).toFixed(2)} data-currency="EGP" data-num-items={cart.items.reduce((n, i) => n + i.quantity, 0)}></div>}
     <h1>{review ? 'REVIEW YOUR ORDER' : 'CHECKOUT'}</h1>
     <Notice />
     {error && <p class="store-notice store-error" role="alert">{error}</p>}

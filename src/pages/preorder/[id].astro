@@ -15,6 +15,7 @@ const open = row?.status === 'pending' && row.checkout_url && row.expires_at > D
     {!row ? <><h1>PRE-ORDER NOT FOUND</h1><p><a href="/">Back to the collection</a></p></>
     : <>
       <h1>{row.status === 'pending' ? 'PAYMENT PENDING' : 'PRE-ORDER CONFIRMED'}</h1>
+      {row.status !== 'pending' && <div hidden data-pixel-event="Purchase" data-event-id={'preorder-' + row.id} data-value={((row.price + row.shipping) / 100).toFixed(2)} data-currency="EGP" data-content-ids={row.variant_id} data-num-items="1"></div>}
       <p>Pre-order {preorderNo(row)} · {row.product_title} · {row.variant_title}</p>
       <dl class="store-totals">
         <div><dt>Deposit {row.status === 'pending' ? 'due' : 'paid'}</dt><dd>{money(row.deposit, true)}</dd></div>

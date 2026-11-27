@@ -10,7 +10,7 @@ export async function POST(context) {
     const handle = slugValue(form.get('product'));
     path = '/?preorder=' + handle;
     await limitRequest(env.DB, context.request, 'preorder', { limit: 12 });
-    return seeOther(await startDeposit(env, form, handle));
+    return seeOther(await startDeposit(env, form, handle, context));
   } catch (error) {
     if (!(error instanceof StoreError)) console.error('Pre-order deposit could not start');
     return formError(error instanceof StoreError ? error : new StoreError('The deposit payment could not be opened. Try again.'), path);

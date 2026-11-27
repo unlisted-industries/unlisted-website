@@ -4,6 +4,7 @@ import { emailValue, StoreError, textValue } from './http.js';
 import { sendEmail } from './auth.js';
 import { money } from './content.js';
 import { ordersChatId } from './telegram-orders.js';
+import { saveOrderContext, sendPurchase } from './meta-capi.js';
 import { capturedTransaction, cardReady, createPaymobIntention, paymentIntegrationIds, paymentOrigin } from './paymob.js';
 
 export const ensurePreorderDeposits = initializeTables(migration);
@@ -29,7 +30,7 @@ function addressInput(form) {
   return [street, 'Building ' + building, apartment && 'Apt ' + apartment].filter(Boolean).join(', ');
 }
 
-export async function startDeposit(env, form, handle) {
+export async function startDeposit(env, form, handle, context = null) {
   if (!cardReady(env)) throw new StoreError('Deposit payment is unavailable right now. Try again soon.');
   if (form.get('consent') !== 'on') throw new StoreError('Please confirm the pre-order terms.');
   const phone = textValue(form, 'phone', 24);
@@ -56,6 +57,7 @@ export async function startDeposit(env, form, handle) {
       input.phone, input.address, input.city, rate.code, rate.label, variant.price, rate.amount, deposit, balance,
       unixNow() + holdSeconds).run();
   const row = await env.DB.prepare('SELECT * FROM preorder_deposits WHERE id = ?').bind(id).first();
+  if (context) await saveOrderContext(env, context, id);
   const intention = await createPaymobIntention(env, { ...row, total: deposit, currency: 'EGP' }, holdSeconds,
     { notification: '/api/paymob?deposit=' + id, redirect: '/preorder/' + id }, 'card',
     [], [{ name: 'Pre-order deposit ' + preorderNo(row), amount: deposit,
@@ -84,6 +86,8 @@ export async function recordDepositCapture(env, id, transaction) {
     provider_txn = ?, checkout_url = NULL WHERE id = ? AND status = 'pending'`).bind(String(transaction.id), id).run();
   if (!updated.meta.changes) return null;
   const paid = { ...row, status: 'paid' };
+  await sendPurchase(env, { id, eventId: 'preorder-' + id, value: paid.price + paid.shipping, email: paid.email, phone: paid.phone,
+    name: paid.name, city: paid.city, contentIds: [paid.variant_id], numItems: 1 });
   await deliverDepositNotifications(env, id).catch(() => console.error('Pre-order notification remains queued'));
   await sendEmail(env, {
     to: paid.email,

@@ -1,5 +1,4 @@
 export const workspaceSections = [
-  { key: 'website', label: 'Website', description: 'Manage your store, catalog, orders, and customers.' },
   { key: 'finance', label: 'Finance', description: 'Track paid revenue and order value.' },
   { key: 'marketing', label: 'Marketing', description: 'Review store traffic, conversion, and promotions.' },
   { key: 'automations', label: 'Automations', description: 'See your business workflows.' },
