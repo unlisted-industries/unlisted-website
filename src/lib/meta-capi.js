@@ -63,13 +63,17 @@ export async function sendOrderPurchase(env, order) {
     name: order.name, city: order.city, contentIds: lines.map((l) => l.variant_id), numItems: lines.reduce((n, l) => n + l.quantity, 0) });
 }
 
-// Checks the token can reach the dataset without sending any event.
-export async function checkCapi(env) {
+// Sends one test-only event (test_event_code), which Meta keeps out of ads reporting, to prove the key can send.
+export async function checkCapi(env, code = 'TEST' + Math.floor(Math.random() * 1e5)) {
   if (!env.META_CAPI_TOKEN) return { ok: false, message: 'META_CAPI_TOKEN is not set.' };
   try {
-    const r = await fetch('https://graph.facebook.com/v21.0/' + pixelId + '?fields=name,last_fired_time&access_token=' + encodeURIComponent(env.META_CAPI_TOKEN), { signal: AbortSignal.timeout(8000) });
+    const r = await fetch('https://graph.facebook.com/v21.0/' + pixelId + '/events?access_token=' + encodeURIComponent(env.META_CAPI_TOKEN), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000),
+      body: JSON.stringify({ test_event_code: code, data: [{ event_name: 'PageView', event_time: Math.floor(Date.now() / 1000), action_source: 'website',
+        event_source_url: 'https://unlisted-shop.com/', user_data: { client_ip_address: '41.0.0.1', client_user_agent: 'UNLISTED connection check' } }] }),
+    });
     const data = await r.json().catch(() => ({}));
-    if (r.ok && data.id) return { ok: true, message: 'Connected to dataset “' + (data.name ?? pixelId) + '”' + (data.last_fired_time ? ' · last event ' + data.last_fired_time : '') };
-    return { ok: false, message: 'Meta refused the key: ' + String(data.error?.message ?? 'HTTP ' + r.status).slice(0, 200) };
+    if (r.ok && data.events_received === 1) return { ok: true, message: 'Conversions API works: Meta accepted a test event (code ' + code + ').' };
+    return { ok: false, message: 'Meta refused the event: ' + String(data.error?.error_user_msg ?? data.error?.message ?? 'HTTP ' + r.status).slice(0, 200) };
   } catch { return { ok: false, message: 'Meta did not answer.' }; }
 }
