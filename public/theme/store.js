@@ -31,12 +31,16 @@ document.addEventListener('keydown', (event) => {
 });
 
 const picker = document.querySelector('[data-variant-picker]');
+const variantDiscount = document.querySelector('[data-offer-discount]');
 picker?.addEventListener('change', () => {
   const option = picker.selectedOptions[0].dataset, price = document.querySelector('[data-variant-price]');
   price.replaceChildren();
   if (option.was) { const was = document.createElement('del'); was.className = 'unl-price-was'; was.textContent = option.was; price.append(was, ' '); }
   const now = document.createElement('span'); now.className = 'unl-price-now'; now.textContent = option.price; price.append(now);
-  if (option.save) { const save = document.createElement('span'); save.className = 'unl-price-save'; save.textContent = 'SAVE ' + option.save; price.append(save); }
+  if (variantDiscount) {
+    variantDiscount.textContent = option.discount;
+    variantDiscount.hidden = !option.discount;
+  }
 });
 
 if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
