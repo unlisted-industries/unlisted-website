@@ -6,6 +6,12 @@ export function telegramReady(env) {
   return /^\d+:[A-Za-z0-9_-]+$/.test(env.TELEGRAM_BOT_TOKEN ?? '') && /^-?\d+$/.test(env.TELEGRAM_CHAT_ID ?? '');
 }
 
+// Orders go to their own chat when TELEGRAM_ORDERS_CHAT_ID is set, so that chat can use a
+// custom notification sound in Telegram. Everything else stays in TELEGRAM_CHAT_ID.
+export function ordersChat(env) {
+  return /^-?\d+$/.test(env.TELEGRAM_ORDERS_CHAT_ID ?? '') ? env.TELEGRAM_ORDERS_CHAT_ID : env.TELEGRAM_CHAT_ID;
+}
+
 export function orderNotificationText(order, lines, origin) {
   const text = (value, max) => String(value ?? '').replace(/[\u0000-\u001f]/g, ' ').slice(0,max);
   const items = lines.map((line) => `${line.quantity} × ${text(line.product_title,100)} · ${text(line.variant_title,60)} · ${money(line.price*line.quantity,true)}`);
@@ -35,7 +41,7 @@ export async function deliverOrderNotifications(env, orderId = null) {
       const lines = await all(env.DB.prepare('SELECT * FROM order_items WHERE order_id=? ORDER BY product_title').bind(order_id));
       const response = await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/sendMessage', {
         method:'POST', headers:{'Content-Type':'application/json'}, signal:AbortSignal.timeout(8000),
-        body:JSON.stringify({chat_id:env.TELEGRAM_CHAT_ID,text:orderNotificationText(order,lines,env.PAYMENT_ORIGIN ?? env.PREVIEW_PAYMENT_ORIGIN),
+        body:JSON.stringify({chat_id:ordersChat(env),text:orderNotificationText(order,lines,env.PAYMENT_ORIGIN ?? env.PREVIEW_PAYMENT_ORIGIN),
           disable_notification:false,protect_content:true,link_preview_options:{is_disabled:true}}),
       });
       delivered = response.ok && (await response.json()).ok === true;

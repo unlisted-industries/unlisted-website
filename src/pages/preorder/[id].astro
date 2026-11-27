@@ -1,0 +1,29 @@
+---
+import { env } from 'cloudflare:workers';
+import Store from '../../layouts/Store.astro';
+import { isToken } from '../../lib/db.js';
+import { money } from '../../lib/content.js';
+import { ensurePreorderDeposits, preorderNo, preorderShipping } from '../../lib/preorder-deposit.js';
+const id = Astro.params.id;
+await ensurePreorderDeposits(env.DB);
+const row = isToken(id, 16) ? await env.DB.prepare('SELECT * FROM preorder_deposits WHERE id = ?').bind(id).first() : null;
+if (!row) Astro.response.status = 404;
+const open = row?.status === 'pending' && row.checkout_url && row.expires_at > Date.now() / 1000;
+---
+<Store title="Pre-order" noIndex>
+  <section class="store-checkout">
+    {!row ? <><h1>PRE-ORDER NOT FOUND</h1><p><a href="/">Back to the collection</a></p></>
+    : <>
+      <h1>{row.status === 'pending' ? 'PAYMENT PENDING' : 'PRE-ORDER CONFIRMED'}</h1>
+      <p>Pre-order {preorderNo(row)} · {row.product_title} · {row.variant_title}</p>
+      <dl class="store-totals">
+        <div><dt>Deposit {row.status === 'pending' ? 'due' : 'paid'}</dt><dd>{money(row.deposit, true)}</dd></div>
+        <div><dt>Pay on delivery</dt><dd>{money(row.balance, true)}</dd></div>
+      </dl>
+      <p>{row.name} · {row.phone}<br />{row.address}, {row.city}, {row.shipping_label}</p>
+      {row.status !== 'pending' ? <p>{preorderShipping.en} A confirmation was sent to {row.email}.</p>
+        : open ? <><p>We haven't received your deposit yet. If you just paid, refresh in a minute.</p><a class="btn" href={row.checkout_url}>CONTINUE TO PAYMENT</a></>
+        : <p>This payment link expired. <a href={'/?preorder=' + (await env.DB.prepare('SELECT handle FROM products WHERE id = ?').bind(row.product_id).first('handle'))}>Start the pre-order again</a>.</p>}
+    </>}
+  </section>
+</Store>

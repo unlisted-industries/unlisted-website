@@ -60,7 +60,7 @@ export function cardReady(env) {
   return paymentConfigurationIssues(env).length === 0;
 }
 
-export async function createPaymobIntention(env, order, remaining, callbacks = {}, method = 'card', lines = []) {
+export async function createPaymobIntention(env, order, remaining, callbacks = {}, method = 'card', lines = [], items = null) {
   const [first, ...last] = order.name.trim().split(/\s+/);
   const response = await fetch(gateway + '/v1/intention/', {
     method: 'POST',
@@ -70,7 +70,7 @@ export async function createPaymobIntention(env, order, remaining, callbacks = {
       amount: order.total,
       currency: order.currency,
       payment_methods: paymentIntegrationIds(env, method),
-      items: lines.length ? paymentSummaryItems(order, lines) : [{ name: 'UNLISTED™ order ' + orderNo(order), amount: order.total, description: 'Clothing order', quantity: 1 }],
+      items: items ?? (lines.length ? paymentSummaryItems(order, lines) : [{ name: 'UNLISTED™ order ' + orderNo(order), amount: order.total, description: 'Clothing order', quantity: 1 }]),
       billing_data: {
         first_name: first, last_name: last.join(' ') || first, street: order.address, building: 'NA',
         floor: 'NA', apartment: 'NA', phone_number: order.phone, email: order.email,

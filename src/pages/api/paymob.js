@@ -3,6 +3,7 @@ import { readBody, StoreError } from '../../lib/http.js';
 import { sendReceipt } from '../../lib/checkout.js';
 import { paymentOrigin, recordCapture, verifyPaymob } from '../../lib/paymob.js';
 import { recordSandboxCapture } from '../../lib/paymob-sandbox.js';
+import { recordDepositCapture } from '../../lib/preorder-deposit.js';
 
 export async function POST({ request, url }) {
   if (!request.headers.get('Content-Type')?.toLowerCase().startsWith('application/json')) {
@@ -22,6 +23,10 @@ export async function POST({ request, url }) {
   try {
     if (url.searchParams.has('sandbox')) {
       await recordSandboxCapture(env, url.origin, url.searchParams.get('sandbox'), message.obj);
+      return new Response(null, { status: 204 });
+    }
+    if (url.searchParams.has('deposit')) {
+      await recordDepositCapture(env, url.searchParams.get('deposit'), message.obj);
       return new Response(null, { status: 204 });
     }
     const order = await recordCapture(env, message.obj);
