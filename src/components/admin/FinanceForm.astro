@@ -9,6 +9,6 @@ const {op,fields=[],submit='Review and save',tab='overview',note=''}=Astro.props
   {f.options?<select name={f.name} required={f.required!==false}>{f.options.map(o=><option value={o[0]} selected={o[0]===f.value}>{o[1]}</option>)}</select>:f.type==='textarea'?<textarea name={f.name} maxlength={f.maxlength||500} required={f.required!==false}>{f.value||''}</textarea>:<input name={f.name} type={f.type||'text'} value={f.value} min={f.min} max={f.max} step={f.step} maxlength={f.maxlength||500} required={f.required!==false} placeholder={f.placeholder}/>}
  </label>)}
  {note&&<p class="fin-muted fin-full">{note}</p>}
- <label class="fin-check fin-full"><input type="checkbox" name="confirmed" value="yes" required/>I reviewed these details and confirm they are correct.</label>
+ <label class="fin-check fin-full"><input type="checkbox" name="confirmed" value="yes" required/>Confirm</label>
  <button type="submit">{submit}</button>
 </form>
