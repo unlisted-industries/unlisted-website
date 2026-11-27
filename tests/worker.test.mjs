@@ -964,7 +964,7 @@ test('courier booking and Paymob refunds claim each external action once and hol
 test('historical evidence updates require owner evidence and customer consent before approval',async()=>{
  const {web}=await rmaSeed('rma-history@example.invalid');
  const now=Math.floor(Date.now()/1000);
- await db.prepare(`INSERT INTO shopify_orders(source_id,order_number,email,created_at,payment,fulfillment,amount,currency,line_items) VALUES('90001','#HISTORY-RMA','rma-history@example.invalid',?,'paid','fulfilled','680.00','EGP',?)`).bind(now-86400,JSON.stringify([{name:'Historical hoodie',sku:'UNKNOWN',quantity:1}])).run();
+ await db.prepare(`INSERT INTO shopify_orders(source_id,order_number,email,created_at,payment,fulfillment,amount,currency,line_items) VALUES('90001','#HISTORY-RMA','rma-history@example.invalid',?,'paid','fulfilled','680.00','EGP',?)`).bind(now-2*86400,JSON.stringify([{name:'Historical hoodie',sku:'UNKNOWN',quantity:1}])).run();
  const fields={order:'shopify:90001',kind:'refund',reason:'defective','select:0':'on','quantity:0':'1',reason_note:'Defect'};
  const html=await (await web('/returns',fields)).text(),f=n=>new RegExp('name="'+n+'" value="([^"]*)"').exec(html)?.[1];
  const id=f('request_id');assert.ok(id);await web('/api/returns',{...fields,request_id:id,quote:f('quote'),accept_quote:'on',language:'en'});

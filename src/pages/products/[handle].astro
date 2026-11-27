@@ -5,7 +5,7 @@ import CozyUpsell from '../../components/CozyUpsell.astro';
 import OfferPrice from '../../components/OfferPrice.astro';
 import HoodieSizeChart from '../../components/HoodieSizeChart.astro';
 import CozySizeFinder from '../../components/CozySizeFinder.astro';
-import { hoodieHandle, sweatsHandle, offerPrice } from '../../lib/offers.js';
+import { hoodieHandle, sweatsHandle, offerPrice, offerDiscountLabel } from '../../lib/offers.js';
 import Notice from '../../components/Notice.astro';
 import { available, cozyMatch, getProduct } from '../../lib/catalog.js';
 import { mediaUrl, money, safeHtml } from '../../lib/content.js';
@@ -32,18 +32,25 @@ const chart = straightLegSweats ? '/theme/catalog/straight-leg-size-chart.webp' 
       <div class="unl-product-images" aria-label="Product photos">
         {product.images.map((image, index) => <div class="unl-product-image">
           <img src={mediaUrl(image.key)} alt={image.alt} width="1000" height="1333" loading={index ? 'lazy' : 'eager'} />
-          {index === 0 && variant && current !== variant.price && <OfferPrice original={variant.price} {current} />}
+          {index === 0 && variant && <OfferPrice original={variant.price} {current} />}
           {showCozyFit && index === 1 && <span class="unl-model-info">MODEL: 172 CM · 67 KG · WEARS S/M</span>}
         </div>)}
       </div>
       <div class="unl-product-info">
         <h1>{product.title}</h1>
         <Notice />
-        <p class="unl-product-price" data-variant-price>{variant && current !== variant.price && <><del class="unl-price-was">{money(variant.price)}</del> </>}<span class="unl-price-now">{money(current)}</span></p>
+        <p class="unl-product-price" data-variant-price>{variant && current < variant.price && <><del class="unl-price-was">{money(variant.price)}</del> </>}<span class="unl-price-now">{money(current)}</span></p>
         {product.variants.some(available) ? <form method="post" action="/api/cart" id="UnlistedBuyForm">
           <label class="unl-size-label" for="UnlistedVariantSelect">{(product.option_names.join(' / ') || 'Variant').toUpperCase()}</label>
           <select id="UnlistedVariantSelect" name="variant" data-variant-picker required>
-            {product.variants.map((item) => <option value={item.id} disabled={!available(item)} selected={item.id === variant?.id} data-price={money(offerPrice(product.handle,item.price,offerNow))} data-was={offerPrice(product.handle,item.price,offerNow) !== item.price ? money(item.price) : ''}>{item.title}{available(item) ? '' : ' — SOLD OUT'}</option>)}
+            {product.variants.map((item) => {
+              const variantPrice = offerPrice(product.handle, item.price, offerNow);
+              return <option value={item.id} disabled={!available(item)} selected={item.id === variant?.id}
+                data-price={money(variantPrice)} data-was={variantPrice < item.price ? money(item.price) : ''}
+                data-discount={offerDiscountLabel(item.price, variantPrice)}>
+                {item.title}{available(item) ? '' : ' — SOLD OUT'}
+              </option>;
+            })}
           </select>
           <input type="hidden" name="quantity" value="1" />
           <button type="submit" name="action" value="add" class="btn unl-buy-button">ADD TO CART</button>

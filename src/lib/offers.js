@@ -14,3 +14,9 @@ export function blackFridayActive(now = Date.now()) {
 export function offerPrice(handle, price, now = Date.now()) {
   return cozyHandles.includes(handle) && blackFridayActive(now) ? salePrice : price;
 }
+
+export function offerDiscountLabel(original, current) {
+  if (current == null || current >= original || original <= 0) return '';
+  const percentage = Math.floor((original - current) * 100 / original);
+  return percentage ? percentage + '% OFF' : '';
+}
