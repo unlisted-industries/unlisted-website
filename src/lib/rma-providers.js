@@ -2,7 +2,7 @@ import { all,makeToken,statements } from './db.js';
 import { caseDetail,ensureRma } from './rma.js';
 import { StoreError,textValue,priceValue } from './http.js';
 
-export function rmaConnections(env) {return {paymob:env.PAYMOB_RMA_REFUNDS_ENABLED==='true'&&!!env.PAYMOB_SECRET_KEY,bosta:env.RMA_SHIPPING_ENABLED==='true'&&!!env.BOSTA_API_KEY&&!!env.BOSTA_BUSINESS_LOCATION_ID,shipblu:env.RMA_SHIPPING_ENABLED==='true'&&!!env.SHIPBLU_API_KEY&&!!env.SHIPBLU_PACKAGE_SIZE,aramex:false};}
+export function rmaConnections(env) {return {paymob:env.PAYMOB_RMA_REFUNDS_ENABLED==='true'&&!!env.PAYMOB_SECRET_KEY,bosta:env.RMA_SHIPPING_ENABLED==='true'&&!!env.BOSTA_API_KEY,shipblu:env.RMA_SHIPPING_ENABLED==='true'&&!!env.SHIPBLU_API_KEY&&!!env.SHIPBLU_PACKAGE_SIZE,aramex:false};}
 async function claim(db,c,kind,provider,amount=0) {
  const id=makeToken(16);
  const r=await db.prepare(`INSERT INTO rma_operations(id,case_id,kind,provider,state,amount) SELECT ?,?,?,?,'running',? WHERE EXISTS(SELECT 1 FROM rma_cases WHERE id=? AND version=? AND state=?) ON CONFLICT(case_id,kind) DO NOTHING RETURNING id`).bind(id,c.id,kind,provider,amount,c.id,c.version,c.state).first();
@@ -34,7 +34,7 @@ export function shipmentPayload(provider,c,direction,env,zone='') {
  const o=c.order,returning=direction==='return';
  if(!o.address||!o.city||!o.phone||!o.name)throw new StoreError('Confirm the customer delivery address and phone first.');
  // Cash collection/refund is separate: never ask the courier to move money implicitly.
- if(provider==='bosta')return {type:returning?25:10,businessLocationId:env.BOSTA_BUSINESS_LOCATION_ID,businessReference:'UNLISTED-'+c.id+'-'+direction,cod:0,specs:{packageType:'Parcel',size:'MEDIUM',packageDetails:{itemsCount:c.lines.reduce((n,l)=>n+l.quantity,0),description:'UNLISTED '+direction}},receiver:{firstName:o.name.split(' ')[0],lastName:o.name.split(' ').slice(1).join(' ')||o.name,phone:o.phone,email:c.email},[returning?'pickupAddress':'dropOffAddress']:{city:o.city,firstLine:o.address,...(zone?{districtId:zone}:{})},notes:'UNLISTED '+c.id};
+ if(provider==='bosta')return {type:returning?25:10,...(env.BOSTA_BUSINESS_LOCATION_ID?{businessLocationId:env.BOSTA_BUSINESS_LOCATION_ID}:{}),businessReference:'UNLISTED-'+c.id+'-'+direction,cod:0,specs:{packageType:'Parcel',size:'MEDIUM',packageDetails:{itemsCount:c.lines.reduce((n,l)=>n+l.quantity,0),description:'UNLISTED '+direction}},receiver:{firstName:o.name.split(' ')[0],lastName:o.name.split(' ').slice(1).join(' ')||o.name,phone:o.phone,email:c.email},[returning?'pickupAddress':'dropOffAddress']:{city:o.governorate||o.city,firstLine:o.governorate&&o.governorate!==o.city?o.address+', '+o.city:o.address,...(zone?{districtId:zone}:{})},notes:'UNLISTED '+c.id};
  if(provider==='shipblu') {
   if(!/^\d+$/.test(zone)||!/^\d+$/.test(env.SHIPBLU_PACKAGE_SIZE||''))throw new StoreError('A verified ShipBlu zone ID and package size ID are required.');
   return {customer:{full_name:o.name,email:c.email,phone:o.phone,address:{line_1:o.address,zone:Number(zone)}},packages:[{package_size:Number(env.SHIPBLU_PACKAGE_SIZE)}],cash_amount:0,merchant_order_reference:'UNLISTED-'+c.id+'-'+direction,order_notes:'UNLISTED '+direction,declared_value:((returning?c.item_value:c.replacement_value)/100).toFixed(2)};
