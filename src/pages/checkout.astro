@@ -51,7 +51,7 @@ const ready = Boolean(enabled && cart.items.length);
           {review.sets.map(set => <li>{set.quantity} × COZY FULL SET · Hoodie {set.hoodie.variant_title} · Sweatpants {set.sweats.variant_title} · {money(set.quantity * set.price)}</li>)}
         </ul>
         <dl class="store-totals">
-          <div><dt>Subtotal</dt><dd>{money(review.subtotal)}</dd></div>
+          <div><dt>Subtotal</dt><dd class="store-subtotal-price">{review.originalSubtotal > review.subtotal && <del aria-label="Original subtotal">{money(review.originalSubtotal)}</del>}<strong>{money(review.subtotal)}</strong></dd></div>
           <div><dt>Delivery</dt><dd>{money(review.rate.amount)}</dd></div>
           {review.discount > 0 && <div><dt>Discount ({input.coupon})</dt><dd>−{money(review.discount)}</dd></div>}
           <div><dt><strong>Total</strong></dt><dd><strong>{money(review.total)}</strong></dd></div>
@@ -72,7 +72,7 @@ const ready = Boolean(enabled && cart.items.length);
         </form>
       </> : <>
         <p>Delivery in Egypt. {!user && <a href="/account">Sign in</a>}</p>
-        <dl class="store-totals"><div><dt>Cart subtotal</dt><dd>{money(cart.subtotal)}</dd></div></dl>
+        <dl class="store-totals"><div><dt>Cart subtotal</dt><dd class="store-subtotal-price">{cart.originalSubtotal > cart.subtotal && <del aria-label="Original subtotal">{money(cart.originalSubtotal)}</del>}<strong>{money(cart.subtotal)}</strong></dd></div></dl>
         <form method="post" action="/checkout" class="form">
           <label>Full name <input name="name" autocomplete="name" required maxlength="100" value={input?.name ?? user?.name} /></label>
           <label>Email <input name="email" type="email" autocomplete="email" required maxlength="254" value={input?.email ?? user?.email} /></label>
