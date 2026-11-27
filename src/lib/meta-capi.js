@@ -62,3 +62,14 @@ export async function sendOrderPurchase(env, order) {
   return sendPurchase(env, { id: order.id, eventId: 'order-' + order.id, value: order.total, email: order.email, phone: order.phone,
     name: order.name, city: order.city, contentIds: lines.map((l) => l.variant_id), numItems: lines.reduce((n, l) => n + l.quantity, 0) });
 }
+
+// Checks the token can reach the dataset without sending any event.
+export async function checkCapi(env) {
+  if (!env.META_CAPI_TOKEN) return { ok: false, message: 'META_CAPI_TOKEN is not set.' };
+  try {
+    const r = await fetch('https://graph.facebook.com/v21.0/' + pixelId + '?fields=name,last_fired_time&access_token=' + encodeURIComponent(env.META_CAPI_TOKEN), { signal: AbortSignal.timeout(8000) });
+    const data = await r.json().catch(() => ({}));
+    if (r.ok && data.id) return { ok: true, message: 'Connected to dataset “' + (data.name ?? pixelId) + '”' + (data.last_fired_time ? ' · last event ' + data.last_fired_time : '') };
+    return { ok: false, message: 'Meta refused the key: ' + String(data.error?.message ?? 'HTTP ' + r.status).slice(0, 200) };
+  } catch { return { ok: false, message: 'Meta did not answer.' }; }
+}
