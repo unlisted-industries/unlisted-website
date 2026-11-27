@@ -203,7 +203,10 @@ test('COD checkout prevents overselling and duplicate orders and restores stock 
   assert.equal((await buyers[won]('/api/checkout', requests[won])).headers.get('Location'), location);
   assert.equal((await browser()(location)).status, 404);
   const receipt = await buyers[won](location);
-  assert.match(await receipt.text(), /Payment is due on delivery/);
+  const receiptHtml = await receipt.text();
+  assert.match(receiptHtml, /Payment is due on delivery/);
+  assert.equal(await db.prepare('SELECT number FROM orders WHERE id=?').bind(order).first('number'), 1);
+  assert.match(receiptHtml, /ORDER #1</);
   assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id='v'").first('inventory'), 0);
   assert.equal(await db.prepare("SELECT count(*) AS total FROM orders").first('total'), 1);
   assert.equal(await db.prepare("SELECT uses FROM discounts WHERE code='COZY10'").first('uses'), 1);
@@ -899,7 +902,7 @@ test('RMA portal verifies ownership, quotes exact amounts, stores private photos
  assert.match((await web('/api/returns',multipart)).headers.get('Location'),/sent=1/);
  const c=await db.prepare('SELECT * FROM rma_cases WHERE id=?').bind(review.request_id).first();assert.equal(c.state,'approved');assert.equal(c.item_value,60000);assert.equal(c.settlement,-60000);assert.equal(c.fee,0);
  const photo=await db.prepare('SELECT * FROM rma_photos WHERE case_id=?').bind(c.id).first();assert.equal((await browser()('/admin/returns-photo?id='+photo.id)).status,401);assert.equal((await browser()('/media/'+photo.media_key)).status,404);assert.equal((await admin('/admin/returns-photo?id='+photo.id)).status,200);
- assert.match(await (await browser()('/returns?request='+c.id)).text(),/Find your orders securely/);
+ assert.match(await (await browser()('/returns?request='+c.id)).text(),/No account needed/);
  assert.equal((await admin('/admin/returns-action',{id:c.id,version:1,operation:'receive'},{Origin:'https://other.invalid'})).status,403);
  assert.equal(await db.prepare('SELECT state FROM rma_cases WHERE id=?').bind(c.id).first('state'),'approved');
  assert.match((await rmaAction(c.id,'receive',{'restock:v':'on'})).headers.get('Location'),/saved=1/);

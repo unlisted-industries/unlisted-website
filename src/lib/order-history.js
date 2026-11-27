@@ -3,7 +3,7 @@ import { ensureShopifyImport } from './shopify-import.js';
 
 // A read model combines existing records without reimporting orders, reserving stock,
 // rewriting original payment/status fields, or linking people by an unverified email.
-const combined = `SELECT id, id AS reference, email, name, created_at, status, payment_status,
+const combined = `SELECT id, coalesce('#' || number, id) AS reference, email, name, created_at, status, payment_status,
   coalesce((SELECT method FROM order_payment_choices WHERE order_id=orders.id), payment_method) AS payment_method,
   total, currency, 0 AS historical FROM orders
   UNION ALL
@@ -32,7 +32,7 @@ export async function historicalOrder(db, id, email = null) {
 export const orderHref = (order, admin = false) => admin
   ? '/admin/orders?order=' + encodeURIComponent(order.id)
   : order.historical ? '/orders/history/' + order.id.slice(8) : '/orders/' + order.id;
-export const orderReference = (order) => order.historical ? order.reference : '#' + order.id.slice(0,8).toUpperCase();
+export const orderReference = (order) => order.historical || String(order.reference ?? '').startsWith('#') ? order.reference : '#' + order.id.slice(0,8).toUpperCase();
 
 export async function unifiedCustomers(db, q='', offset=0) {
   await ensureShopifyImport(db);

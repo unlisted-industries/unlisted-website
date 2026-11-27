@@ -1,4 +1,5 @@
 import migration from '../../migrations/0014_returns_workspace.sql?raw';
+import { orderNo } from './order-number.js';
 import { all,isToken,makeToken,sha256,statements,unixNow } from './db.js';
 import { ensureFinance,splitFinanceSql } from './finance-schema.js';
 import { historicalOrder } from './order-history.js';
@@ -18,7 +19,7 @@ export async function rmaOrder(db,key,email=null) {
   if(!o)return null;
   const lines=await all(db.prepare(`SELECT i.*,c.unit_cost FROM order_items i LEFT JOIN finance_order_costs c ON c.order_id=i.order_id AND c.variant_id=i.variant_id WHERE i.order_id=? ORDER BY i.variant_id`).bind(o.id));
   const credit=await db.prepare('SELECT amount FROM rma_credit_uses WHERE order_id=? AND released=0').bind(o.id).first('amount')||0;
-  result={key,reference:'#'+o.id.slice(0,8).toUpperCase(),email:o.email,name:o.name,phone:o.phone,address:o.address,city:o.city,total:o.total,shipping:o.shipping,net:o.subtotal-o.discount,currency:o.currency,paid:o.payment_status==='paid',cancelled:o.status==='cancelled',delivered_at:o.delivered_at,refunded:o.payment_status==='refunded'?o.total:0,method:o.payment_method,credit_used:credit,lines:lines.map(l=>({key:l.variant_id,variant_id:l.variant_id,title:l.product_title+' · '+l.variant_title,quantity:l.quantity,price:l.price,unit_cost:l.unit_cost}))};
+  result={key,reference:orderNo(o),email:o.email,name:o.name,phone:o.phone,address:o.address,city:o.city,total:o.total,shipping:o.shipping,net:o.subtotal-o.discount,currency:o.currency,paid:o.payment_status==='paid',cancelled:o.status==='cancelled',delivered_at:o.delivered_at,refunded:o.payment_status==='refunded'?o.total:0,method:o.payment_method,credit_used:credit,lines:lines.map(l=>({key:l.variant_id,variant_id:l.variant_id,title:l.product_title+' · '+l.variant_title,quantity:l.quantity,price:l.price,unit_cost:l.unit_cost}))};
   if(o.status!=='delivered')result.delivered_at=null;
  } else if(/^shopify:\d{1,30}$/.test(key||'')) {
   const o=await historicalOrder(db,key.slice(8),email);if(!o)return null;
