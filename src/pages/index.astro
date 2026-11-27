@@ -3,10 +3,10 @@ import { env } from 'cloudflare:workers';
 import Store from '../layouts/Store.astro';
 import ProductCard from '../components/ProductCard.astro';
 import CozySetVisual from '../components/CozySetVisual.astro';
-import { hoodieHandle, sweatsHandle } from '../lib/offers.js';
+import { hoodieHandle, sweatsHandle, setPrice, setRegularPrice } from '../lib/offers.js';
 import Preorder from '../components/Preorder.astro';
 import { getSettings, featuredProducts, getProduct, getCollection, available } from '../lib/catalog.js';
-import { mediaUrl } from '../lib/content.js';
+import { mediaUrl, money } from '../lib/content.js';
 const slug = Astro.url.searchParams.get('preorder');
 const preorder = slug ? await getProduct(env.DB, slug) : null;
 if (preorder && !preorder.preorder) return Astro.redirect('/products/' + preorder.handle, 301);
@@ -35,6 +35,7 @@ const soldOut = group === 't-shirts' && !products.some((product) => product.vari
       <article class="cozy-set">
         <CozySetVisual {hoodie} {sweats} />
         <div class="cozy-set-copy"><h2>COZY FULL SET</h2><p>Grey hoodie + grey straight leg sweatpants. Choose your size for each piece.</p>
+          <p class="cozy-set-price"><del class="unl-price-was">{money(setRegularPrice, true)}</del><strong class="unl-price-now">{money(setPrice, true)}</strong></p>
           <div class="cozy-set-form"><a class="btn" href="/offers#cozy-set">SHOP OFFERS</a></div>
         </div>
       </article>
