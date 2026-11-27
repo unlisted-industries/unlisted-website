@@ -970,7 +970,8 @@ test('historical evidence updates require owner evidence and customer consent be
  const id=f('request_id');assert.ok(id);await web('/api/returns',{...fields,request_id:id,quote:f('quote'),accept_quote:'on',language:'en'});
  assert.equal(await db.prepare('SELECT eligibility FROM rma_cases WHERE id=?').bind(id).first('eligibility'),'evidence_review');
  assert.match((await rmaAction(id,'approve',{reviewed:'on',message:'Evidence incomplete'})).headers.get('Location'),/error=/);
- const date=new Intl.DateTimeFormat('sv-SE',{timeZone:'Africa/Cairo'}).format(new Date((now-86400)*1000));
+ // Use a completed delivery day: today's noon is in the future in morning runs.
+ const date=new Date(Date.now()-86400000).toISOString().slice(0,10);
  assert.match((await rmaAction(id,'verify-evidence',{verified_total:'680',prior_refunded:'0',delivered_on:date,shipping_refund:'80','value:0':'600','variant:0':'v','cost:0':'200',payment_verified:'on',message:'Invoice and courier receipt verified'})).headers.get('Location'),/saved=1/);
  assert.equal(await db.prepare('SELECT eligibility FROM rma_cases WHERE id=?').bind(id).first('eligibility'),'customer_review');
  assert.match((await rmaAction(id,'approve',{reviewed:'on',message:'Customer has not agreed'})).headers.get('Location'),/error=/);

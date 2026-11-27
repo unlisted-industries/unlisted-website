@@ -19,7 +19,7 @@ export async function cartCount(db, context) {
 }
 
 export async function getCart(db, id) {
-  if (!id) return { items: [], singles: [], sets: [], subtotal: 0, version: 0, hasOffer: false };
+  if (!id) return { items: [], singles: [], sets: [], subtotal: 0, originalSubtotal: 0, version: 0, hasOffer: false };
   await ensureOffers(db);
   const [cart, components, pairs] = await db.batch([
     db.prepare('SELECT version FROM carts WHERE id=?').bind(id),
@@ -39,6 +39,7 @@ export async function getCart(db, id) {
   return {
     items, singles:items.filter(item=>!item.is_set), sets,
     subtotal:items.reduce((sum,item)=>sum+item.price*item.quantity,0),
+    originalSubtotal:items.reduce((sum,item)=>sum+Math.max(item.regular_price,item.price)*item.quantity,0),
     version:cart.results[0]?.version ?? 0, hasOffer:items.some(item=>item.offer===1),
   };
 }
