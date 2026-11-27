@@ -27,9 +27,9 @@ const support = supportOrder.flatMap((url) => navigation.filter((link) => link.u
     <link rel="stylesheet" href="/theme/drop2.css" />
     <link rel="stylesheet" href="/theme/unlisted-enhancements.css" />
     <link rel="stylesheet" href="/theme/product-upsell.css" />
-    <link rel="stylesheet" href="/theme/store.css" />
+    <link rel="stylesheet" href="/theme/store.css?v=2" />
     <link rel="stylesheet" href="/theme/offers.css?v=4" />
-    <script is:inline src="/theme/store.js?v=3" defer></script>
+    <script is:inline src="/theme/store.js?v=4" defer></script>
     {Boolean(store.analytics_enabled) && <script is:inline src="/theme/visitors.js" defer></script>}
     <!-- Meta Pixel Code -->
   <script is:inline>
@@ -98,5 +98,7 @@ const support = supportOrder.flatMap((url) => navigation.filter((link) => link.u
         <div class="footer-bottom"><span class="footer-logo" role="img" aria-label={store.name}></span><small>© {new Date().getUTCFullYear()}</small></div>
       </footer>
     </div>
+    <div class="cd-overlay" data-cart-close hidden></div>
+    <aside class="cart-drawer" id="CartDrawer" aria-label="Your cart" aria-hidden="true" inert></aside>
   </body>
 </html>

@@ -34,3 +34,41 @@ body.store-menu-open { overflow: hidden; }
 .payment-option:has(input:disabled) { opacity:.6; cursor:default; }
 .profile-form { margin:28px 0; }
 @media(max-width:480px) { .header-actions{gap:4px;} .store-checkout{padding-left:16px;padding-right:16px;} }
+
+/* Slide-in cart */
+.cd-overlay { position: fixed; inset: 0; background: rgb(11 24 48 / .45); z-index: 90; }
+.cart-drawer { position: fixed; inset-block: 0; inset-inline-end: 0; width: min(420px, 100vw); background: #fff; color: #0b1830; z-index: 91; display: flex; flex-direction: column; transform: translateX(100%); transition: transform .28s ease; box-shadow: -12px 0 40px rgb(0 0 0 / .15); }
+.cart-drawer.is-open { transform: none; }
+@media (prefers-reduced-motion: reduce) { .cart-drawer { transition: none; } }
+.cd-head { display: flex; justify-content: space-between; align-items: center; padding: 18px 20px; border-bottom: 1px solid #e6e8ec; }
+.cd-head h2 { margin: 0; font-size: 15px; letter-spacing: .08em; }
+.cd-close { border: 0; background: none; font-size: 28px; line-height: 1; cursor: pointer; color: inherit; }
+.cd-body { flex: 1; overflow-y: auto; padding: 8px 20px; }
+.cd-empty { padding: 40px 20px; text-align: center; }
+.cd-item { display: grid; grid-template-columns: 76px 1fr; gap: 14px; padding: 14px 0; border-bottom: 1px solid #f0f1f3; }
+.cd-item img { width: 76px; height: 100px; object-fit: cover; background: #f2f2f2; display: block; }
+.cd-item p { margin: 4px 0; font-size: 13px; color: #5a6478; }
+.cd-title { font-weight: 800; font-size: 13px; letter-spacing: .03em; color: inherit; text-decoration: none; }
+.cd-price del { color: #8a93a3; margin-inline-end: 6px; }
+.cd-price strong { color: #c8102e; }
+.cd-remove { border: 0; background: none; padding: 0; font-size: 12px; text-decoration: underline; color: #5a6478; cursor: pointer; }
+.cd-upsell { margin: 16px 0 8px; padding: 12px 14px; background: #f5f6f8; border-radius: 10px; }
+.cd-upsell .cd-item { border: 0; padding: 6px 0 0; }
+.cd-upsell-kicker { margin: 0; font-size: 11px; font-weight: 900; letter-spacing: .14em; color: #c8102e; }
+.cd-upsell-form { display: flex; gap: 8px; margin-top: 8px; }
+.cd-upsell-form select { flex: 1; min-height: 38px; border: 1px solid #c9ced6; background: #fff; padding: 0 8px; font: inherit; font-size: 13px; }
+.cd-add { min-height: 38px; padding: 0 14px; border: 0; background: #0b1830; color: #fff; font-weight: 800; font-size: 12px; letter-spacing: .06em; cursor: pointer; }
+.cd-foot { padding: 16px 20px 18px; border-top: 1px solid #e6e8ec; background: #fff; }
+.cd-total { display: flex; justify-content: space-between; font-size: 15px; font-weight: 800; letter-spacing: .05em; }
+.cd-note { margin: 6px 0 12px; font-size: 12px; color: #5a6478; }
+.cd-checkout { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
+.cd-continue { display: block; width: 100%; margin-top: 8px; padding: 10px; border: 1px solid #0b1830; background: #fff; color: #0b1830; font-weight: 700; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; cursor: pointer; }
+.cd-pay { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 14px; }
+.pay { display: inline-flex; align-items: center; justify-content: center; height: 24px; min-width: 40px; padding: 0 8px; border: 1px solid #e1e4e8; border-radius: 4px; background: #fff; font-size: 10px; font-weight: 800; color: #0b1830; }
+.pay.visa { color: #1a1f71; font-style: italic; font-size: 12px; letter-spacing: .02em; }
+.pay.mc { gap: 0; } .pay.mc i { width: 13px; height: 13px; border-radius: 50%; display: block; } .pay.mc i:first-child { background: #eb001b; } .pay.mc i:last-child { background: #f79e1b; margin-inline-start: -5px; opacity: .9; }
+.cd-secure { margin: 8px 0 0; text-align: center; font-size: 11px; color: #5a6478; }
+/* Product price: was / now */
+.unl-price-was { color: #8a93a3; font-size: .8em; margin-inline-end: 8px; }
+.unl-price-now { color: #c8102e; font-weight: 700; }
+.unl-price-save { display: inline-block; margin-inline-start: 10px; padding: 3px 8px; background: #c8102e; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .08em; vertical-align: middle; }

@@ -1,0 +1,74 @@
+---
+// Slide-in cart (from the right) loaded after "Add to cart". Same data as /cart.
+import { env } from 'cloudflare:workers';
+import { cartId, getCart } from '../lib/cart.js';
+import { available, cozyMatch, getProduct, getSettings } from '../lib/catalog.js';
+import { offerPrice, hoodieHandle } from '../lib/offers.js';
+import { cardReady, walletReady } from '../lib/paymob.js';
+import { mediaUrl, money } from '../lib/content.js';
+Astro.response.headers.set('Cache-Control', 'no-store');
+const cart = await getCart(env.DB, cartId(Astro));
+const settings = await getSettings(Astro, env.DB);
+const count = cart.singles.reduce((n, i) => n + i.quantity, 0) + cart.sets.reduce((n, s) => n + s.quantity * 2, 0);
+const handles = cart.singles.map((i) => i.handle);
+const source = handles.find((h) => Object.hasOwn(cozyMatch, h));
+const match = source && !handles.includes(cozyMatch[source]) ? await getProduct(env.DB, cozyMatch[source]) : null;
+const matchVariants = match?.variants.filter(available) ?? [];
+const matchPrice = matchVariants[0] ? offerPrice(match.handle, matchVariants[0].price) : 0;
+const card = Boolean(settings.card_enabled) && cardReady(env);
+const wallet = card && walletReady(env);
+const cod = Boolean(settings.cod_enabled);
+---
+<div class="cd-head">
+  <h2>YOUR CART <span data-cart-drawer-count={count}>({count})</span></h2>
+  <button type="button" class="cd-close" data-cart-close aria-label="Close cart">×</button>
+</div>
+{!cart.items.length ? <div class="cd-empty"><p>Your cart is empty.</p><button type="button" class="btn" data-cart-close>CONTINUE SHOPPING</button></div> : <>
+  <div class="cd-body">
+    {cart.singles.map((item) => <article class="cd-item">
+      <a href={'/products/' + item.handle}>{item.image && <img src={mediaUrl(item.image)} alt={item.title} width="76" height="100" />}</a>
+      <div>
+        <a class="cd-title" href={'/products/' + item.handle}>{item.title}</a>
+        {item.variant_title !== 'Default Title' && <p>Size: {item.variant_title} · Qty {item.quantity}</p>}
+        <p class="cd-price">{item.regular_price !== item.price && <del>{money(item.regular_price * item.quantity, true)}</del>} <strong>{money(item.price * item.quantity, true)}</strong></p>
+        <form method="post" action="/api/cart"><input type="hidden" name="variant" value={item.id} /><input type="hidden" name="action" value="remove" /><button class="cd-remove">Remove</button></form>
+      </div>
+    </article>)}
+    {cart.sets.map((set) => <article class="cd-item">
+      <a href="/offers#cozy-set">{set.hoodie?.image && <img src={mediaUrl(set.hoodie.image)} alt="COZY Full Set" width="76" height="100" />}</a>
+      <div>
+        <a class="cd-title" href="/offers#cozy-set">COZY FULL SET</a>
+        <p>Hoodie {set.hoodie?.variant_title} · Sweatpants {set.sweats?.variant_title} · Qty {set.quantity}</p>
+        <p class="cd-price"><strong>{money(set.price * set.quantity, true)}</strong></p>
+        <form method="post" action="/api/cart"><input type="hidden" name="hoodie" value={set.hoodie_id} /><input type="hidden" name="sweats" value={set.sweats_id} /><input type="hidden" name="action" value="update_set" /><button class="cd-remove" name="quantity" value="0">Remove</button></form>
+      </div>
+    </article>)}
+    {matchVariants.length > 0 && <aside class="cd-upsell">
+      <p class="cd-upsell-kicker">COMPLETE THE FIT</p>
+      <div class="cd-item">
+        <a href={'/products/' + match.handle}>{match.images[0] && <img src={mediaUrl(match.images[0].key)} alt={match.title} width="76" height="100" loading="lazy" />}</a>
+        <div>
+          <a class="cd-title" href={'/products/' + match.handle}>{match.title}</a>
+          <p class="cd-price">{matchPrice !== matchVariants[0].price && <del>{money(matchVariants[0].price, true)}</del>} <strong>{money(matchPrice, true)}</strong></p>
+          <p class="cd-upsell-note">The matching {match.handle === hoodieHandle ? 'hoodie' : 'sweatpants'} for your set.</p>
+          <form method="post" action="/api/cart" class="cd-upsell-form">
+            <select name="variant" aria-label={'Size for ' + match.title}>{matchVariants.map((v) => <option value={v.id}>{v.title}</option>)}</select>
+            <button name="action" value="add" class="cd-add">+ ADD</button>
+          </form>
+        </div>
+      </div>
+    </aside>}
+  </div>
+  <div class="cd-foot">
+    <div class="cd-total"><span>SUBTOTAL</span><strong>{money(cart.subtotal, true)}</strong></div>
+    <p class="cd-note">Shipping calculated at checkout · Free 14-day returns &amp; exchanges</p>
+    <a class="btn cd-checkout" href="/checkout"><svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v4H5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V11a1 1 0 0 0-1-1h-2V6a5 5 0 0 0-5-5Zm-3 9V6a3 3 0 1 1 6 0v4H9Z"/></svg> SECURE CHECKOUT</a>
+    <button type="button" class="cd-continue" data-cart-close>Continue shopping</button>
+    <div class="cd-pay" aria-label="Payment methods we accept">
+      {card && <><span class="pay visa">VISA</span><span class="pay mc"><i></i><i></i></span></>}
+      {wallet && <span class="pay wallet">Mobile wallet</span>}
+      {cod && <span class="pay cod">Cash on delivery</span>}
+    </div>
+    {card && <p class="cd-secure">Card payments are processed securely by Paymob. We never see or store your card details.</p>}
+  </div>
+</>}
