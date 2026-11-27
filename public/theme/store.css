@@ -71,4 +71,7 @@ body.store-menu-open { overflow: hidden; }
 /* Product price: was / now */
 .unl-price-was { color: #8a93a3; font-size: .8em; margin-inline-end: 8px; }
 .unl-price-now { color: #c8102e; font-weight: 700; }
-.unl-price-save { display: inline-block; margin-inline-start: 10px; padding: 3px 8px; background: #c8102e; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .08em; vertical-align: middle; }
+.store-subtotal-price { display: inline-flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-end; gap: 4px 10px; text-align: end; }
+.store-subtotal-price del { color: #8a93a3; font-size: .85em; font-weight: 400; white-space: nowrap; }
+.store-subtotal-price strong { white-space: nowrap; }
+.cd-total, .unl-cart-total { align-items: baseline; gap: 12px; }

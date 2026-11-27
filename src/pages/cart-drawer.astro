@@ -60,7 +60,7 @@ const cod = Boolean(settings.cod_enabled);
     </aside>}
   </div>
   <div class="cd-foot">
-    <div class="cd-total"><span>SUBTOTAL</span><strong>{money(cart.subtotal, true)}</strong></div>
+    <div class="cd-total"><span>SUBTOTAL</span><span class="store-subtotal-price">{cart.originalSubtotal > cart.subtotal && <del aria-label="Original subtotal">{money(cart.originalSubtotal, true)}</del>}<strong>{money(cart.subtotal, true)}</strong></span></div>
     <p class="cd-note">Shipping calculated at checkout · Free 14-day returns &amp; exchanges</p>
     <a class="btn cd-checkout" href="/checkout"><svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v4H5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V11a1 1 0 0 0-1-1h-2V6a5 5 0 0 0-5-5Zm-3 9V6a3 3 0 1 1 6 0v4H9Z"/></svg> SECURE CHECKOUT</a>
     <button type="button" class="cd-continue" data-cart-close>Continue shopping</button>

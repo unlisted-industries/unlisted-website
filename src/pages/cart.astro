@@ -59,7 +59,7 @@ const cart = await getCart(env.DB, cartId(Astro));
         </div>
       </article>)}
       <CozyUpsell cartHandles={cart.singles.map((item) => item.handle)} />
-      <div class="unl-cart-total"><span>SUBTOTAL</span><strong>{money(cart.subtotal)}</strong></div>
+      <div class="unl-cart-total"><span>SUBTOTAL</span><span class="store-subtotal-price">{cart.originalSubtotal > cart.subtotal && <del aria-label="Original subtotal">{money(cart.originalSubtotal)}</del>}<strong>{money(cart.subtotal)}</strong></span></div>
       <p class="unl-cart-note">Shipping is calculated at checkout.</p>
       <div class="unl-cart-actions"><a class="btn" href="/checkout">CHECKOUT</a></div>
     </>}
