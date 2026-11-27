@@ -8,9 +8,8 @@ const clock = [Math.floor(time / 3600), Math.floor(time / 60) % 60, time % 60].m
 ---
 {now < saleEndsAt && <aside class="offer-banner" data-offer-clock data-now={now} data-boundary={boundary} aria-label="Black Friday">
   <a href="/offers">
-    <strong>BLACK FRIDAY</strong>
     <span class="offer-banner-countdown">
-      <span class="offer-banner-detail">{active ? (lang === 'ar' ? 'العرض ينتهي خلال' : 'Ends in') : (lang === 'ar' ? 'العرض يبدأ خلال' : 'Starts in')}</span>
+      <strong class="offer-banner-title">{lang === 'ar' ? (active ? 'عرض البلاك فرايداي ينتهي خلال' : 'عرض البلاك فرايداي يبدأ خلال') : (active ? 'BLACK FRIDAY SALE ENDS IN' : 'BLACK FRIDAY SALE STARTS IN')}</strong>
       <time datetime={new Date(boundary).toISOString()} data-offer-time aria-label={active ? 'Offer ends November 29 at midnight Cairo time' : 'Offer starts November 27 at midnight Cairo time'}>{clock.map((digits, index) => <>{index > 0 && ':'}<span class="offer-banner-digits">{digits}</span></>)}</time>
     </span>
     <span class="offer-banner-link">{lang === 'ar' ? 'العروض' : 'Shop offers'} <span aria-hidden="true">↗</span></span>
