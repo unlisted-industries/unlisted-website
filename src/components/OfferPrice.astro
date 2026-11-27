@@ -1,19 +1,15 @@
 ---
-import { money } from '../lib/content.js';
 import { offerDiscountLabel } from '../lib/offers.js';
-const { original, current, label } = Astro.props;
+const { original, current } = Astro.props;
 const discount = offerDiscountLabel(original, current);
-const [saleAmount, currency] = money(current, true).split(' ');
 ---
-{label ? <span class="offer-price-tag" aria-label={label + ': ' + money(current,true) + ', originally ' + money(original,true)}>
-  <span class="offer-price-label">{label}</span>
-  <span class="offer-price-values"><del>{money(original,true)}</del><strong><span class="offer-amount">{saleAmount}</span> {currency}</strong></span>
-</span> : <span class="offer-price-tag offer-discount" data-offer-discount hidden={!discount}>{discount}</span>}
+<span class="offer-price-tag offer-discount" data-offer-discount hidden={!discount}>{discount}</span>
 
 <style>
   .offer-discount {
     inset-inline-end: auto;
     right: 12px;
+    color: var(--red);
     font-size: 12px;
     font-weight: 800;
   }
