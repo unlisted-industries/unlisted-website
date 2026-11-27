@@ -68,19 +68,16 @@ const poster = mediaUrl(settings.hero_poster);
         <h3>{group.name}</h3>
         <strong>{money(group.value, true)}</strong>
         <p>{group.quantity} items · {group.orders} orders</p>
-        {group.missing > 0 && <small>{group.missing} order lines need review.</small>}
         {group.project && <a href={'/admin/operations?project=' + group.project}>{group.project === 'stock-2' ? 'Stock 2 records' : 'Stock 3 records'}</a>}
       </article>)}
       <article class="collection-tile"><h3>Senior T-shirts</h3><p>Separate business · sales unrecorded</p><a href="/admin/operations?project=senior-shirts">Senior T-shirt records</a></article>
     </div>
-    <p class="metrics-scope">Product value excludes shipping. Shopify figures use net product sales. Website figures show the merchandise value at checkout after discounts. COZY batch attribution is still under review.</p>
   </section>
   <div class="home-dashboard">
     <div class="home-performance">
       <section class="panel home-summary" aria-label="Store performance">
         <header class="performance-heading"><div><p class="overline">ONLINE STORE</p><h2>Performance</h2></div><a href={reportUrl.pathname + reportUrl.search}>View report <Icon name="arrow" /></a></header>
         <dl class="home-stats">{stats.map(([label, value]) => <div><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-        <p class="metrics-scope">Order totals include imported history without linked duplicates. Visitors and conversion use this storefront only. Bank settlements and fees need reconciliation.</p>
       </section>
       <section class="panel home-next"><h2>Next up</h2><nav class="home-actions" aria-label="Store actions">
         {tasks.map(([icon, label, count, link]) => <a href={link}><Icon name={icon} />{label}<span>{count}</span></a>)}
