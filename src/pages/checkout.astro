@@ -83,8 +83,8 @@ const addressFields = (value) => ({ street: value.street ?? '', building: value.
           <label>Phone <input name="phone" type="tel" autocomplete="tel" required maxlength="24" value={input?.phone ?? profile?.phone} /></label>
           <label>Street <input name="street" autocomplete="address-line1" required maxlength="200" placeholder="e.g. 14 Fouad Street" value={savedStreet} /></label>
           <div class="checkout-row">
-            <label>Building <input name="building" autocomplete="address-line2" required maxlength="40" inputmode="text" value={input?.building} /></label>
-            <label>Apartment <input name="apartment" maxlength="40" placeholder="Optional" value={input?.apartment} /></label>
+            <label>Building name / no. <input name="building" autocomplete="address-line2" required maxlength="60" inputmode="text" value={input?.building} /></label>
+            <label>Apartment no. <input name="apartment" maxlength="40" required value={input?.apartment} /></label>
           </div>
           <div class="checkout-row">
             <label>City / area <input name="city" autocomplete="address-level2" required maxlength="100" placeholder="e.g. Nasr City" value={input?.city ?? profile?.city} /></label>

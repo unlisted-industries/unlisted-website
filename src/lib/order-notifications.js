@@ -1,15 +1,10 @@
 import { all } from './db.js';
 import { orderNo } from './order-number.js';
 import { money } from './content.js';
+import { ordersChatId } from './telegram-orders.js';
 
 export function telegramReady(env) {
   return /^\d+:[A-Za-z0-9_-]+$/.test(env.TELEGRAM_BOT_TOKEN ?? '') && /^-?\d+$/.test(env.TELEGRAM_CHAT_ID ?? '');
-}
-
-// Orders go to their own chat when TELEGRAM_ORDERS_CHAT_ID is set, so that chat can use a
-// custom notification sound in Telegram. Everything else stays in TELEGRAM_CHAT_ID.
-export function ordersChat(env) {
-  return /^-?\d+$/.test(env.TELEGRAM_ORDERS_CHAT_ID ?? '') ? env.TELEGRAM_ORDERS_CHAT_ID : env.TELEGRAM_CHAT_ID;
 }
 
 export function orderNotificationText(order, lines, origin) {
@@ -30,6 +25,7 @@ export async function deliverOrderNotifications(env, orderId = null) {
   if (!telegramReady(env)) return;
   const pending = await all(env.DB.prepare(`SELECT order_id FROM order_notifications WHERE sent_at IS NULL
     AND next_attempt_at<=unixepoch() AND locked_until<unixepoch() AND (? IS NULL OR order_id=?) LIMIT 10`).bind(orderId,orderId));
+  const chat = pending.length ? await ordersChatId(env) : null;
   for (const { order_id } of pending) {
     const lock = await env.DB.prepare(`UPDATE order_notifications SET locked_until=unixepoch()+60, attempts=attempts+1
       WHERE order_id=? AND sent_at IS NULL AND locked_until<unixepoch() RETURNING attempts,locked_until`).bind(order_id).first();
@@ -41,7 +37,7 @@ export async function deliverOrderNotifications(env, orderId = null) {
       const lines = await all(env.DB.prepare('SELECT * FROM order_items WHERE order_id=? ORDER BY product_title').bind(order_id));
       const response = await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/sendMessage', {
         method:'POST', headers:{'Content-Type':'application/json'}, signal:AbortSignal.timeout(8000),
-        body:JSON.stringify({chat_id:ordersChat(env),text:orderNotificationText(order,lines,env.PAYMENT_ORIGIN ?? env.PREVIEW_PAYMENT_ORIGIN),
+        body:JSON.stringify({chat_id:chat,text:orderNotificationText(order,lines,env.PAYMENT_ORIGIN ?? env.PREVIEW_PAYMENT_ORIGIN),
           disable_notification:false,protect_content:true,link_preview_options:{is_disabled:true}}),
       });
       delivered = response.ok && (await response.json()).ok === true;

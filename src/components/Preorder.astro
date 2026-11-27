@@ -39,8 +39,8 @@ const ready = cardReady(env) && product.variants.length > 0 && rates.length > 0;
         <label>Phone <input type="tel" name="phone" autocomplete="tel" maxlength="24" required /></label>
         <label>Street <input name="street" autocomplete="address-line1" maxlength="200" required placeholder="e.g. 14 Fouad Street" /></label>
         <div class="preorder-row">
-          <label>Building <input name="building" autocomplete="address-line2" maxlength="40" required /></label>
-          <label>Apartment <input name="apartment" maxlength="40" placeholder="Optional" /></label>
+          <label>Building name / no. <input name="building" autocomplete="address-line2" maxlength="60" required /></label>
+          <label>Apartment no. <input name="apartment" maxlength="40" required /></label>
         </div>
         <div class="preorder-row">
           <label>City / area <input name="city" autocomplete="address-level2" maxlength="100" required placeholder="e.g. Nasr City" /></label>

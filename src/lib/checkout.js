@@ -30,8 +30,8 @@ export function checkoutInput(form) {
   if (form.has('street')) {
     parts = {
       street: textValue(form, 'street', 200),
-      building: textValue(form, 'building', 40),
-      apartment: textValue(form, 'apartment', 40, false),
+      building: textValue(form, 'building', 60),
+      apartment: textValue(form, 'apartment', 40),
     };
     address = [parts.street, 'Building ' + parts.building, parts.apartment && 'Apt ' + parts.apartment].filter(Boolean).join(', ');
   } else {

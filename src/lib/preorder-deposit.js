@@ -3,6 +3,7 @@ import { all, initializeTables, isToken, makeToken, unixNow } from './db.js';
 import { emailValue, StoreError, textValue } from './http.js';
 import { sendEmail } from './auth.js';
 import { money } from './content.js';
+import { ordersChatId } from './telegram-orders.js';
 import { capturedTransaction, cardReady, createPaymobIntention, paymentIntegrationIds, paymentOrigin } from './paymob.js';
 
 export const ensurePreorderDeposits = initializeTables(migration);
@@ -23,8 +24,8 @@ export function depositSplit(price, shipping) {
 
 function addressInput(form) {
   const street = textValue(form, 'street', 200);
-  const building = textValue(form, 'building', 40);
-  const apartment = textValue(form, 'apartment', 40, false);
+  const building = textValue(form, 'building', 60);
+  const apartment = textValue(form, 'apartment', 40);
   return [street, 'Building ' + building, apartment && 'Apt ' + apartment].filter(Boolean).join(', ');
 }
 
@@ -111,7 +112,7 @@ export function depositNotificationText(row, origin) {
 }
 
 export async function deliverDepositNotifications(env, id = null) {
-  const token = env.TELEGRAM_BOT_TOKEN ?? '', chat = env.TELEGRAM_ORDERS_CHAT_ID || env.TELEGRAM_CHAT_ID || '';
+  const token = env.TELEGRAM_BOT_TOKEN ?? '', chat = String(await ordersChatId(env) ?? '');
   if (!/^\d+:[A-Za-z0-9_-]+$/.test(token) || !/^-?\d+$/.test(chat)) return;
   await ensurePreorderDeposits(env.DB);
   const rows = await all(env.DB.prepare(`SELECT * FROM preorder_deposits WHERE status = 'paid' AND notified_at IS NULL

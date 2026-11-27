@@ -80,7 +80,8 @@ before(async () => {
         return Response.json({ id: 'test-email-' + mail.length });
       }
       if (url.origin === 'https://api.telegram.org') {
-        telegram.push(await request.json());
+        if (url.pathname.endsWith('/getUpdates')) return Response.json({ok:true,result:[{update_id:1,my_chat_member:{chat:{id:-100777,type:'supergroup',title:'UNLISTED Orders'}}}]});
+        telegram.push({...await request.json(), method:url.pathname.split('/').at(-1)});
         return Response.json({ok:!failTelegram},{status:failTelegram ? 503 : 200});
       }
       if (url.href === 'https://accept.paymob.com/v1/intention/') {
@@ -1195,4 +1196,22 @@ test('pre-order takes a 450 EGP Paymob deposit, lists it for the owner and alert
   assert.match(await (await web('/preorder/' + row.id)).text(), /PRE-ORDER CONFIRMED/);
   admin = browser(); await admin('/admin/session', { action: 'password', password: ownerPassword });
   assert.match(await (await admin('/admin/inbox?kind=preorders')).text(), /Pre Buyer[\s\S]*14 Fouad Street/);
+});
+
+test('orders group connects with the cha-ching sound and receives order alerts while other alerts stay in the main chat', async () => {
+  admin = browser(); await admin('/admin/session', { action: 'password', password: ownerPassword });
+  const before = telegram.length;
+  const connected = await admin('/admin/finance-action', { op: 'orders_chat', tab: 'settings', confirmed: 'yes', request_id: 'a'.repeat(32) });
+  assert.match(connected.headers.get('Location'), /connected=UNLISTED%20Orders/);
+  const sentNow = telegram.slice(before);
+  assert.equal(sentNow[0].method, 'sendAudio');
+  assert.equal(sentNow[0].chat_id, -100777);
+  assert.match(sentNow[0].audio, /\/theme\/cha-ching\.mp3$/);
+  const web = browser();
+  await db.prepare("UPDATE variants SET inventory=5,price=60000 WHERE id='v'").run();
+  const input = await customerCheckout(web, 'chaching@example.invalid', 'cod', '');
+  const mark = telegram.length;
+  await web('/api/checkout', input);
+  const alert = telegram.slice(mark).find((m) => /NEW ORDER/.test(m.text ?? ''));
+  assert.equal(String(alert.chat_id), '-100777');
 });
