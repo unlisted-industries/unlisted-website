@@ -16,9 +16,9 @@ const current = price === null ? null : offerPrice(product.handle,price,offerNow
 <a class="drop-card" href={url} data-category={product.category}>
   <div class="drop-card-image">
     {image && <img src={imageSource} alt={product.title} loading={eager ? 'eager' : 'lazy'} width="900" height="900" />}
-    {current !== price && <OfferPrice original={price} {current} />}
+    {current < price && <OfferPrice original={price} {current} />}
   </div>
   {Boolean(product.preorder) && <span class="drop-badge">PRE-ORDER</span>}
   <h2>{product.title}</h2>
-  {price !== null && <span class="drop-price">{money(current, true)}</span>}
+  {price !== null && <span class="drop-price">{current < price && <del class="unl-price-was">{money(price, true)}</del>}{money(current, true)}</span>}
 </a>
