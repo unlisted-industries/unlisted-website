@@ -27,7 +27,7 @@ export async function rmaOrder(db,key,email=null) {
   if(link)return rmaOrder(db,'website:'+link,email);
   const h=json(o.data).header||{},raw=json(o.line_items,[]),variants=await all(db.prepare('SELECT id,sku FROM variants'));
   const lines=raw.map((l,index)=>{const match=variants.filter(v=>l.sku&&v.sku===l.sku);return {key:String(index),variant_id:match.length===1?match[0].id:null,title:l.name,quantity:Number(l.quantity),price:cents(l.price),unit_cost:null};});
-  result={key,reference:o.order_number,email:o.email,name:h['Shipping Name']||h['Billing Name']||'',phone:h['Shipping Phone']||h.Phone||'',address:[h['Shipping Address1'],h['Shipping Address2']].filter(Boolean).join(', '),city:h['Shipping City']||'',total:cents(o.amount),shipping:cents(h.Shipping),currency:o.currency,paid:['paid','partially_refunded'].includes(o.payment),cancelled:!!o.cancelled_at,delivered_at:null,refunded:cents(h['Refunded Amount']||'0'),method:h['Payment Method']||'historical',credit_used:0,lines};
+  result={key,reference:o.order_number,email:o.email,name:h['Shipping Name']||h['Billing Name']||'',phone:h['Shipping Phone']||h.Phone||'',address:[h['Shipping Address1'],h['Shipping Address2']].filter(Boolean).join(', '),city:h['Shipping City']||'',governorate:h['Shipping Province Name']||'',total:cents(o.amount),shipping:cents(h.Shipping),currency:o.currency,paid:['paid','partially_refunded'].includes(o.payment),cancelled:!!o.cancelled_at,delivered_at:null,refunded:cents(h['Refunded Amount']||'0'),method:h['Payment Method']||'historical',credit_used:0,lines};
   result.net=result.total!==null&&result.shipping!==null?result.total-result.shipping:null;
  }
  if(!result)return null;
