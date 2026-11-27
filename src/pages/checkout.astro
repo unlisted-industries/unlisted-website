@@ -16,9 +16,10 @@ const [settings, cart, rates, user] = await Promise.all([
   getSettings(Astro, env.DB), getCart(env.DB, id), shippingRates(env.DB), currentUser(env, Astro),
 ]);
 const card = settings.card_enabled && cardReady(env);
+// Wallet stays supported server-side but is not offered on the page.
 const wallet = settings.card_enabled && walletReady(env);
 const profile = user ? await env.DB.prepare('SELECT * FROM customer_profiles WHERE customer_id=?').bind(user.id).first() : null;
-const enabled = checkoutReady(env, settings) && rates.length && (settings.cod_enabled || card || wallet);
+const enabled = checkoutReady(env, settings) && rates.length && (settings.cod_enabled || card);
 const saved = await env.DB.prepare('SELECT data FROM checkout_drafts WHERE cart_id=? AND expires_at>unixepoch()').bind(id).first('data');
 let input = saved ? JSON.parse(saved) : undefined, review, error;
 if (Astro.request.method === 'POST' && enabled) {
@@ -35,6 +36,9 @@ if (Astro.request.method === 'POST' && enabled) {
   }
 }
 const ready = Boolean(enabled && cart.items.length);
+const flatRate = rates.length && rates.every((rate) => rate.amount === rates[0].amount) ? rates[0].amount : null;
+const savedStreet = input?.street ?? input?.address ?? profile?.address;
+const addressFields = (value) => ({ street: value.street ?? '', building: value.building ?? '', apartment: value.apartment ?? '' });
 ---
 <Store title="Checkout" noIndex>
   <section class="store-checkout">
@@ -67,7 +71,7 @@ const ready = Boolean(enabled && cart.items.length);
         <p><a href="/cart">Edit cart</a></p>
         <form method="post" action="/checkout" class="form">
           {Object.entries({name:input.name,email:input.email,phone:input.phone,address:input.address,city:input.city,
-            governorate:input.governorate,discount:input.coupon,payment_method:input.method,edit:'1'}).map(([key,value]) => <input type="hidden" name={key} value={value} />)}
+            governorate:input.governorate,discount:input.coupon,payment_method:input.method,edit:'1',...(input.street ? addressFields(input) : {})}).map(([key,value]) => <input type="hidden" name={key} value={value} />)}
           <button class="btn" type="submit">EDIT DELIVERY OR PAYMENT DETAILS</button>
         </form>
       </> : <>
@@ -77,22 +81,31 @@ const ready = Boolean(enabled && cart.items.length);
           <label>Full name <input name="name" autocomplete="name" required maxlength="100" value={input?.name ?? user?.name} /></label>
           <label>Email <input name="email" type="email" autocomplete="email" required maxlength="254" value={input?.email ?? user?.email} /></label>
           <label>Phone <input name="phone" type="tel" autocomplete="tel" required maxlength="24" value={input?.phone ?? profile?.phone} /></label>
-          <label>Street, building and apartment <textarea name="address" autocomplete="street-address" required maxlength="350">{input?.address ?? profile?.address}</textarea></label>
-          <label>City or district <input name="city" autocomplete="address-level2" required maxlength="100" value={input?.city ?? profile?.city} /></label>
-          <label>Governorate
-            <select name="governorate" autocomplete="address-level1" required>
-              <option value="">Choose your governorate</option>
-              {rates.map((rate) => <option value={rate.code} selected={(input?.governorate ?? profile?.governorate) === rate.code}>{rate.label} · {money(rate.amount, true)}</option>)}
-            </select>
-          </label>
+          <label>Street <input name="street" autocomplete="address-line1" required maxlength="200" placeholder="e.g. 14 Fouad Street" value={savedStreet} /></label>
+          <div class="checkout-row">
+            <label>Building <input name="building" autocomplete="address-line2" required maxlength="40" inputmode="text" value={input?.building} /></label>
+            <label>Apartment <input name="apartment" maxlength="40" placeholder="Optional" value={input?.apartment} /></label>
+          </div>
+          <div class="checkout-row">
+            <label>City / area <input name="city" autocomplete="address-level2" required maxlength="100" placeholder="e.g. Nasr City" value={input?.city ?? profile?.city} /></label>
+            <label>Governorate
+              <select name="governorate" autocomplete="address-level1" required>
+                <option value="">Choose</option>
+                {rates.map((rate) => <option value={rate.code} selected={(input?.governorate ?? profile?.governorate) === rate.code}>{rate.label}{flatRate === null && ' · ' + money(rate.amount, true)}</option>)}
+              </select>
+            </label>
+          </div>
+          {flatRate !== null && <p class="checkout-shipping">Standard delivery · {money(flatRate, true)} · all governorates</p>}
           <label>{cart.hasOffer ? 'Store credit code' : 'Discount code'} <input name="discount" maxlength="32" value={input?.coupon} /></label>
           {cart.hasOffer && <p>COZY offers can’t be combined with other discounts.</p>}
           <fieldset class="payment-options">
             <legend>Payment</legend>
             {Boolean(settings.cod_enabled) && <label class="payment-option"><input type="radio" name="payment_method" value="cod" checked={input?.method === 'cod' || !input?.method} required /><span>Cash on Delivery</span></label>}
-            {Boolean(card) && <label class="payment-option"><input type="radio" name="payment_method" value="card" checked={input?.method === 'card' || !input?.method && !settings.cod_enabled} required /><span>Card</span></label>}
-            <label class="payment-option"><input type="radio" name="payment_method" value="wallet" disabled={!wallet} checked={input?.method === 'wallet' || !input?.method && !settings.cod_enabled && !card && wallet} required /><span>Wallet{!wallet && <small>Currently unavailable</small>}</span></label>
-            {(card || wallet) && <p>Secure payment on Paymob after you review your order.</p>}
+            {Boolean(card) && <label class="payment-option"><input type="radio" name="payment_method" value="card" checked={input?.method === 'card' || !input?.method && !settings.cod_enabled} required /><span>Card</span><span class="card-marks" aria-label="Visa and Mastercard accepted">
+              <svg viewBox="0 7.6 24 8.8" width="44" height="16" aria-hidden="true"><path fill="#1A1F71" d="M9.112 8.262L5.97 15.758H3.92L2.374 9.775c-.094-.368-.175-.503-.461-.658C1.447 8.864.677 8.627 0 8.479l.046-.217h3.3a.904.904 0 01.894.764l.817 4.338 2.018-5.102zm8.033 5.049c.008-1.979-2.736-2.088-2.717-2.972.006-.269.262-.555.822-.628a3.66 3.66 0 011.913.336l.34-1.59a5.207 5.207 0 00-1.814-.333c-1.917 0-3.266 1.02-3.278 2.479-.012 1.079.963 1.68 1.698 2.04.756.367 1.01.603 1.006.931-.005.504-.602.725-1.16.734-.975.015-1.54-.263-1.992-.473l-.351 1.642c.453.208 1.289.39 2.156.398 2.037 0 3.37-1.006 3.377-2.564m5.061 2.447H24l-1.565-7.496h-1.656a.883.883 0 00-.826.55l-2.909 6.946h2.036l.405-1.12h2.488zm-2.163-2.656l1.02-2.815.588 2.815zm-8.16-4.84l-1.603 7.496H8.34l1.605-7.496z"/></svg>
+              <svg viewBox="2 0 32 22" width="23" height="16" aria-hidden="true"><circle cx="13" cy="11" r="9" fill="#EB001B"/><circle cx="23" cy="11" r="9" fill="#F79E1B"/><path fill="#FF5F00" d="M18 3.5a9 9 0 0 1 0 15 9 9 0 0 1 0-15z"/></svg>
+            </span></label>}
+            {Boolean(card) && <p class="paymob-secure"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 0 1 6 0v3z"/></svg> Secured by <strong>Paymob</strong></p>}
           </fieldset>
           <button class="btn" type="submit">REVIEW ORDER</button>
         </form>

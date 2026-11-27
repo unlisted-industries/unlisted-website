@@ -24,11 +24,25 @@ export function checkoutInput(form) {
   if (!/^\+?[\d ()-]{8,24}$/.test(phone) || phone.replace(/\D/g, '').length < 8) {
     throw new StoreError('Enter a valid phone number.');
   }
+  // Bosta needs street (first line), building and apartment. They are entered separately
+  // and stored as one address line so orders, notifications and exports keep working.
+  let address, parts = {};
+  if (form.has('street')) {
+    parts = {
+      street: textValue(form, 'street', 200),
+      building: textValue(form, 'building', 40),
+      apartment: textValue(form, 'apartment', 40, false),
+    };
+    address = [parts.street, 'Building ' + parts.building, parts.apartment && 'Apt ' + parts.apartment].filter(Boolean).join(', ');
+  } else {
+    address = textValue(form, 'address', 350);
+  }
   return {
     name: textValue(form, 'name', 100),
     email: emailValue(form),
     phone,
-    address: textValue(form, 'address', 350),
+    address,
+    ...parts,
     city: textValue(form, 'city', 100),
     governorate: textValue(form, 'governorate', 80),
     coupon: discountCode(textValue(form, 'discount', 32, false)),

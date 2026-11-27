@@ -75,3 +75,9 @@ body.store-menu-open { overflow: hidden; }
 .store-subtotal-price del { color: #8a93a3; font-size: .85em; font-weight: 400; white-space: nowrap; }
 .store-subtotal-price strong { white-space: nowrap; }
 .cd-total, .unl-cart-total { align-items: baseline; gap: 12px; }
+.store-checkout .form .checkout-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.store-checkout .checkout-shipping { margin:0; font-size:13px; color:var(--muted); }
+.store-checkout .form .payment-options .payment-option .card-marks { display:inline-flex; gap:6px; margin-left:auto; }
+.card-marks svg { display:block; padding:2px 4px; border:1px solid #e3e5e9; background:#fff; border-radius:3px; box-sizing:content-box; height:16px; width:auto; }
+.store-checkout .paymob-secure { display:flex; align-items:center; gap:5px; margin:8px 0 0; font-size:11px; color:var(--muted); }
+.store-checkout .paymob-secure strong { color:var(--navy); letter-spacing:.02em; }
