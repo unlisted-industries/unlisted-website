@@ -1,33 +1,57 @@
 .offer-banner {
-  background: #0b1830;
+  position: relative;
+  overflow: hidden;
+  background: radial-gradient(120% 180% at 50% 0%, #2a0a12 0%, #0b0b10 55%, #000 100%);
   color: #fff;
   text-align: center;
-  font-size: 12px;
   font-variant-numeric: tabular-nums;
+  border-bottom: 2px solid #fe0000;
+}
+.offer-banner::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / .07) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: ob-shine 4.5s ease-in-out infinite;
+  pointer-events: none;
 }
 .offer-banner a {
-  align-items: center;
-  justify-content: center;
+  position: relative;
   display: flex;
   flex-wrap: wrap;
-  gap: 6px clamp(8px, 2vw, 22px);
-  padding: 8px 10px;
-  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px clamp(12px, 2.4vw, 28px);
+  padding: 10px 12px;
   color: inherit;
   text-decoration: none;
 }
-.offer-banner-title { letter-spacing: .06em; font-size: clamp(16px, 3.2vw, 24px); font-weight: 900; line-height: 1.1; }
-.offer-banner-countdown { display: inline-flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px 12px; }
-.offer-banner time {
+.ob-head { display: inline-flex; align-items: center; gap: 10px; }
+.ob-live { width: 10px; height: 10px; border-radius: 50%; background: #fe0000; box-shadow: 0 0 0 0 rgb(254 0 0 / .7); animation: ob-pulse 1.6s infinite; }
+.offer-banner-title { letter-spacing: .08em; font-size: clamp(17px, 3.4vw, 26px); font-weight: 900; line-height: 1.05; text-shadow: 0 0 18px rgb(254 0 0 / .35); }
+.offer-banner time { display: inline-flex; align-items: flex-start; gap: 4px; direction: ltr; font-weight: 800; line-height: 1; }
+.ob-unit { display: grid; justify-items: center; gap: 3px; }
+.offer-banner-digits {
+  min-width: 1.9em;
+  padding: 5px 6px 4px;
+  border-radius: 7px;
+  background: #fe0000;
   color: #fff;
-  font-size: clamp(21px, 4vw, 32px);
-  font-weight: 800;
-  letter-spacing: .025em;
-  line-height: 1.1;
-  direction: ltr;
+  font-size: clamp(19px, 3.6vw, 28px);
+  box-shadow: inset 0 -2px 0 rgb(0 0 0 / .25), 0 4px 14px rgb(254 0 0 / .35);
 }
-.offer-banner-digits { color: #fe0000; }
-.offer-banner-link { text-decoration: underline; text-underline-offset: 3px; }
+.ob-unit small { font-size: 9px; letter-spacing: .14em; color: #c9ccd4; font-weight: 700; }
+.ob-colon { color: #fff; font-size: clamp(19px, 3.6vw, 28px); padding-top: 4px; animation: ob-blink 1s steps(1) infinite; }
+.ob-cta { padding: 9px 16px; border-radius: 999px; background: #fff; color: #000; font-size: 12px; font-weight: 900; letter-spacing: .1em; transition: transform .15s; }
+.offer-banner a:hover .ob-cta { transform: translateX(3px); }
+.ob-sub { flex-basis: 100%; font-size: 11px; letter-spacing: .04em; color: #c9ccd4; margin-top: -2px; }
+.offer-banner.is-urgent .offer-banner-digits { animation: ob-urgent 1s ease-in-out infinite; }
+@keyframes ob-pulse { 70% { box-shadow: 0 0 0 9px rgb(254 0 0 / 0); } 100% { box-shadow: 0 0 0 0 rgb(254 0 0 / 0); } }
+@keyframes ob-shine { 60%, 100% { transform: translateX(100%); } }
+@keyframes ob-blink { 50% { opacity: .35; } }
+@keyframes ob-urgent { 50% { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .offer-banner::before, .ob-live, .ob-colon, .offer-banner.is-urgent .offer-banner-digits { animation: none; } }
 .drop-card-image, .unl-product-image, .cozy-set-visual { position: relative; }
 .offer-price-tag {
   position: absolute;

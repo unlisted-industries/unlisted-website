@@ -1,56 +1,134 @@
 ---
-// Shopify-style "Total sales over time": this period (solid) vs previous period (dashed).
-// Website orders (not cancelled) + imported Shopify orders (not cancelled, not linked duplicates). Cairo days.
+// Shopify-style "Total sales over time". Smooth line, previous period dashed, hover tooltip.
+// Ranges: today … all time, or custom dates. Filter: all sales, or one stock/collection.
 import { env } from 'cloudflare:workers';
-import { all } from '../../lib/db.js';
+import { salesPoints, collections } from '../../lib/collection-sales.js';
 import { money } from '../../lib/content.js';
-const days = [7, 30, 90].includes(Number(Astro.url.searchParams.get('chart'))) ? Number(Astro.url.searchParams.get('chart')) : 30;
-const day = 86400, cairo = 7200;
-const today = Math.floor((Date.now() / 1000 + cairo) / day);
-const start = today - days + 1, prevStart = start - days;
-const rows = await all(env.DB.prepare(`SELECT d, sum(amount) amount, count(*) orders FROM (
-    SELECT CAST((created_at + ?) / ? AS INTEGER) d, total amount FROM orders WHERE status <> 'cancelled' AND created_at >= ?
-    UNION ALL
-    SELECT CAST((created_at + ?) / ? AS INTEGER), CAST(round(CAST(amount AS NUMERIC) * 100) AS INTEGER) FROM shopify_orders
-      WHERE cancelled_at IS NULL AND created_at >= ? AND source_id NOT IN (SELECT shopify_source_id FROM finance_order_links)
-  ) GROUP BY d`).bind(cairo, day, prevStart * day - cairo, cairo, day, prevStart * day - cairo));
-const byDay = new Map(rows.map((r) => [r.d, r]));
-const series = (from) => Array.from({ length: days }, (_, i) => byDay.get(from + i)?.amount ?? 0);
-const current = series(start), previous = series(prevStart);
-const sum = (a) => a.reduce((n, v) => n + v, 0);
-const total = sum(current), prevTotal = sum(previous);
-const orders = Array.from({ length: days }, (_, i) => byDay.get(start + i)?.orders ?? 0).reduce((n, v) => n + v, 0);
-const change = prevTotal ? Math.round(100 * (total - prevTotal) / prevTotal) : null;
-const W = 720, H = 200, pad = 8, max = Math.max(1, ...current, ...previous);
-const pts = (a) => a.map((v, i) => `${(pad + i * (W - 2 * pad) / Math.max(1, days - 1)).toFixed(1)},${(H - pad - v / max * (H - 2 * pad)).toFixed(1)}`).join(' ');
-const label = (d) => new Date(d * day * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const q = Astro.url.searchParams;
+const DAY = 86400, CAIRO = 7200;
+const dayOf = (t) => Math.floor((t + CAIRO) / DAY);
+const today = dayOf(Math.floor(Date.now() / 1000));
+const points = await salesPoints(env.DB);
+const firstDay = points.length ? Math.min(...points.map((p) => dayOf(p.at))) : today;
+const ranges = [['today', 'Today', 1], ['7', 'Last 7 days', 7], ['30', 'Last 30 days', 30], ['90', 'Last 90 days', 90], ['365', 'Last 12 months', 365], ['all', 'All time', null]];
+const iso = (d) => new Date(d * DAY * 1000).toISOString().slice(0, 10);
+const parse = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v ?? '') ? Math.floor(Date.parse(v + 'T00:00:00Z') / 1000 / DAY) : null;
+let range = q.get('range') ?? 'all', start, end = today;
+if (range === 'custom' && parse(q.get('from')) !== null && parse(q.get('to')) !== null) {
+  start = Math.min(parse(q.get('from')), parse(q.get('to'))); end = Math.max(parse(q.get('from')), parse(q.get('to')));
+} else {
+  const r = ranges.find(([k]) => k === range) ?? ranges.at(-1); range = r[0];
+  start = r[2] ? today - r[2] + 1 : Math.min(firstDay, today);
+}
+const stock = collections.some((c) => c.name === q.get('stock')) ? q.get('stock') : '';
+const length = end - start + 1;
+const step = length > 400 ? 30 : length > 120 ? 7 : 1; // daily, weekly, or monthly-ish buckets
+const buckets = Math.ceil(length / step);
+const compare = range !== 'all';
+const prevStart = start - length;
+function series(from) {
+  const out = Array(buckets).fill(0);
+  for (const p of points) {
+    const d = dayOf(p.at) - from;
+    if (d < 0 || d >= length) continue;
+    out[Math.floor(d / step)] += stock ? (p.collection === stock ? p.value : 0) : p.total;
+  }
+  return out;
+}
+const now = series(start), prev = compare ? series(prevStart) : [];
+const inRange = (from) => points.filter((p) => dayOf(p.at) >= from && dayOf(p.at) < from + length && (!stock || p.collection === stock));
+const total = now.reduce((a, b) => a + b, 0), prevTotal = prev.reduce((a, b) => a + b, 0);
+const orders = new Set(inRange(start).map((p) => p.order)).size;
+const items = inRange(start).reduce((n, p) => n + p.quantity, 0);
+const change = compare && prevTotal ? Math.round(100 * (total - prevTotal) / prevTotal) : null;
+const fmt = (d) => new Date(d * DAY * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const fmtY = (d) => new Date(d * DAY * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+// Chart geometry
+const W = 760, H = 240, L = 62, R = 12, T = 12, B = 28;
+const top = Math.max(1, ...now, ...prev);
+const nice = (v) => { const m = 10 ** Math.floor(Math.log10(v)); return [1, 2, 2.5, 5, 10].map((k) => k * m).find((k) => k >= v); };
+const yMax = Math.max(10000, nice(Math.max(top, 1) / 100 / 4) * 4 * 100);
+const x = (i) => L + (buckets === 1 ? (W - L - R) / 2 : i * (W - L - R) / (buckets - 1));
+const y = (v) => T + (H - T - B) * (1 - v / yMax);
+function smooth(a) { // monotone cubic: smooth like Shopify, never dips below zero
+  if (!a.length) return '';
+  const p = a.map((v, i) => [x(i), y(v)]);
+  if (p.length === 1) return `M${p[0][0] - 20},${p[0][1]}H${p[0][0] + 20}`;
+  const s = p.slice(1).map((q, i) => (q[1] - p[i][1]) / (q[0] - p[i][0]));
+  const m = p.map((_, i) => i === 0 ? s[0] : i === p.length - 1 ? s.at(-1) : s[i - 1] * s[i] <= 0 ? 0 : (s[i - 1] + s[i]) / 2);
+  let d = `M${p[0][0].toFixed(1)},${p[0][1].toFixed(1)}`;
+  for (let i = 0; i < p.length - 1; i++) {
+    const h = (p[i + 1][0] - p[i][0]) / 3;
+    d += `C${(p[i][0] + h).toFixed(1)},${(p[i][1] + m[i] * h).toFixed(1)} ${(p[i + 1][0] - h).toFixed(1)},${(p[i + 1][1] - m[i + 1] * h).toFixed(1)} ${p[i + 1][0].toFixed(1)},${p[i + 1][1].toFixed(1)}`;
+  }
+  return d;
+}
+const ticks = [0, 1, 2, 3, 4].map((k) => yMax * k / 4);
+const xl = [...new Set([0, 1, 2, 3, 4, 5].map((k) => Math.round(k * (buckets - 1) / 5)))];
+const egp = (v) => v >= 100000 ? 'EGP ' + (v / 100000).toFixed(v % 100000 ? 1 : 0) + 'K' : 'EGP ' + Math.round(v / 100);
+const tip = now.map((v, i) => ({ x: x(i), y: y(v), label: step === 1 ? fmt(start + i) : fmt(start + i * step) + ' – ' + fmt(Math.min(end, start + i * step + step - 1)), v: money(v, true), p: compare ? money(prev[i] ?? 0, true) : null }));
+const keep = (extra) => { const u = new URLSearchParams(q); for (const [k, v] of Object.entries(extra)) v === null ? u.delete(k) : u.set(k, v); return '?' + u; };
 ---
 <section class="panel sales-chart" aria-labelledby="sales-chart-title">
-  <header class="performance-heading">
-    <div><p class="overline">TOTAL SALES</p><h2 id="sales-chart-title">{money(total, true)}
-      {change !== null && <span class:list={['sc-change', change >= 0 ? 'up' : 'down']}>{change >= 0 ? '↑' : '↓'} {Math.abs(change)}%</span>}</h2>
-      <p class="muted">{orders} orders · last {days} days</p></div>
-    <nav class="sc-range">{[7, 30, 90].map((d) => <a href={'?chart=' + d} class:list={[d === days && 'on']}>{d} days</a>)}</nav>
-  </header>
-  <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`Daily sales, last ${days} days`}>
-    {[0.25, 0.5, 0.75].map((f) => <line x1="0" x2={W} y1={H * f} y2={H * f} class="sc-grid" />)}
-    <polyline points={pts(previous)} class="sc-prev" />
-    <polyline points={pts(current)} class="sc-now" />
-  </svg>
-  <div class="sc-axis"><span>{label(start)}</span><span>{label(today)}</span></div>
-  <p class="sc-legend"><span class="sc-key now"></span>Last {days} days <span class="sc-key prev"></span>Previous {days} days</p>
+  <form class="sc-controls" method="get">
+    <select name="range" onchange="this.form.querySelector('.sc-custom').hidden=this.value!=='custom';if(this.value!=='custom')this.form.submit()">
+      {ranges.map(([k, label]) => <option value={k} selected={range === k}>{label}</option>)}
+      <option value="custom" selected={range === 'custom'}>Custom dates…</option>
+    </select>
+    <span class="sc-custom" hidden={range !== 'custom'}><input type="date" name="from" value={iso(start)} /> → <input type="date" name="to" value={iso(end)} /><button class="button">Apply</button></span>
+    <select name="stock" onchange="this.form.submit()">
+      <option value="">All sales</option>
+      {collections.map((c) => <option value={c.name} selected={stock === c.name}>{c.name}</option>)}
+    </select>
+  </form>
+  <h2 id="sales-chart-title">{money(total, true)}{change !== null && <span class:list={['sc-change', change >= 0 ? 'up' : 'down']}>{change >= 0 ? '↑' : '↓'} {Math.abs(change)}%</span>}</h2>
+  <p class="sc-sub"><strong>{stock || 'Total sales'}</strong> over time · {orders} orders · {items} items</p>
+  <p class="sc-note">{stock ? 'Product value after discounts, excluding shipping.' : 'Amount customers paid, including shipping.'}</p>
+  <div class="sc-wrap" data-sc={JSON.stringify(tip)}>
+    <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Sales over time">
+      {ticks.map((v) => <><line x1={L} x2={W - R} y1={y(v)} y2={y(v)} class="sc-grid" /><text x={L - 8} y={y(v) + 4} class="sc-ylab">{egp(v)}</text></>)}
+      {xl.map((i) => <text x={x(i)} y={H - 6} class="sc-xlab">{fmt(start + i * step)}</text>)}
+      {compare && <path d={smooth(prev)} class="sc-prev" />}
+      <path d={`${smooth(now)}L${x(buckets - 1)},${y(0)}L${x(0)},${y(0)}Z`} class="sc-area" />
+      <path d={smooth(now)} class="sc-now" />
+      <line class="sc-cursor" y1={T} y2={H - B} x1="-10" x2="-10" /><circle class="sc-dot" r="4.5" cx="-10" cy="-10" />
+    </svg>
+    <div class="sc-tip" hidden></div>
+  </div>
+  <p class="sc-legend"><span class="sc-key"></span>{fmtY(start)} – {fmtY(end)}{compare && <><span class="sc-key prev"></span>{fmtY(prevStart)} – {fmtY(start - 1)}</>}</p>
 </section>
+<script is:inline>
+  document.querySelectorAll('.sc-wrap').forEach((wrap) => {
+    const data = JSON.parse(wrap.dataset.sc), svg = wrap.querySelector('svg'), tip = wrap.querySelector('.sc-tip');
+    const cursor = svg.querySelector('.sc-cursor'), dot = svg.querySelector('.sc-dot');
+    const move = (e) => {
+      const r = svg.getBoundingClientRect(), vx = (e.clientX - r.left) * svg.viewBox.baseVal.width / r.width;
+      let best = data[0]; for (const d of data) if (Math.abs(d.x - vx) < Math.abs(best.x - vx)) best = d;
+      cursor.setAttribute('x1', best.x); cursor.setAttribute('x2', best.x); dot.setAttribute('cx', best.x); dot.setAttribute('cy', best.y);
+      tip.hidden = false; tip.innerHTML = '<small>' + best.label + '</small><strong>' + best.v + '</strong>' + (best.p ? '<small>Previous: ' + best.p + '</small>' : '');
+      const px = best.x / svg.viewBox.baseVal.width * r.width; tip.style.left = Math.min(Math.max(px, 70), r.width - 70) + 'px';
+    };
+    svg.addEventListener('pointermove', move);
+    svg.addEventListener('pointerleave', () => { tip.hidden = true; dot.setAttribute('cx', -10); cursor.setAttribute('x1', -10); cursor.setAttribute('x2', -10); });
+  });
+</script>
 <style>
   .sales-chart { margin-bottom: 18px; }
-  .sales-chart h2 { display: flex; align-items: baseline; gap: 10px; font-size: 28px; font-variant-numeric: tabular-nums; }
-  .sc-change { font-size: 13px; font-weight: 600; } .sc-change.up { color: #1a7f37; } .sc-change.down { color: #c8102e; }
-  .sc-range { display: flex; gap: 6px; } .sc-range a { padding: 5px 10px; border: 1px solid #e3e6e3; border-radius: 8px; font-size: 13px; text-decoration: none; color: inherit; }
-  .sc-range a.on { background: #0b1830; color: #fff; border-color: #0b1830; }
-  .sales-chart svg { width: 100%; height: 200px; display: block; margin-top: 8px; }
-  .sc-grid { stroke: #eef0ee; stroke-width: 1; }
-  .sc-now { fill: none; stroke: #2563eb; stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
-  .sc-prev { fill: none; stroke: #93b4f5; stroke-width: 1.5; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
-  .sc-axis { display: flex; justify-content: space-between; font-size: 12px; color: #6b7280; }
-  .sc-legend { font-size: 12px; color: #6b7280; display: flex; align-items: center; gap: 6px; }
-  .sc-key { display: inline-block; width: 16px; height: 0; border-top: 2.5px solid #2563eb; margin-left: 8px; } .sc-key.prev { border-top: 1.5px dashed #93b4f5; }
+  .sc-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .sc-controls select, .sc-controls input { padding: 7px 10px; border: 1px solid #dfe3df; border-radius: 9px; background: #fff; font: inherit; font-size: 13px; }
+  .sc-custom { display: inline-flex; gap: 6px; align-items: center; } .sc-custom[hidden] { display: none; }
+  .sales-chart h2 { display: flex; align-items: baseline; gap: 10px; margin: 0; font-size: 30px; font-variant-numeric: tabular-nums; }
+  .sc-change { font-size: 18px; font-weight: 600; } .sc-change.up { color: #29845a; } .sc-change.down { color: #c8102e; }
+  .sc-sub { margin: 4px 0 0; font-size: 13px; } .sc-note { margin: 2px 0 0; font-size: 12px; color: #6b7280; }
+  .sc-wrap { position: relative; margin-top: 10px; }
+  .sales-chart svg { width: 100%; height: auto; display: block; overflow: visible; touch-action: pan-y; }
+  .sc-grid { stroke: #f0f1f0; } .sc-ylab { font-size: 11px; fill: #6b7280; text-anchor: end; } .sc-xlab { font-size: 11px; fill: #6b7280; text-anchor: middle; }
+  .sc-now { fill: none; stroke: #1f9fe0; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+  .sc-area { fill: #1f9fe0; opacity: .07; }
+  .sc-prev { fill: none; stroke: #8fd0f0; stroke-width: 2; stroke-dasharray: 3 5; stroke-linecap: round; }
+  .sc-cursor { stroke: #c9ced3; stroke-dasharray: 3 3; } .sc-dot { fill: #fff; stroke: #1f9fe0; stroke-width: 2.5; }
+  .sc-tip { position: absolute; top: -6px; transform: translateX(-50%); display: grid; gap: 2px; padding: 8px 10px; background: #fff; border: 1px solid #e3e6e3; border-radius: 10px; box-shadow: 0 6px 18px rgb(0 0 0 / .08); font-size: 12px; pointer-events: none; white-space: nowrap; }
+  .sc-tip small { color: #6b7280; } .sc-tip strong { font-size: 14px; }
+  .sc-legend { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; font-size: 12px; color: #4b5563; margin-top: 8px; }
+  .sc-key { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #1f9fe0; margin-left: 12px; } .sc-key.prev { background: #8fd0f0; }
 </style>
