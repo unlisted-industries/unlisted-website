@@ -46,3 +46,12 @@ export async function deliverOrderNotifications(env, orderId = null) {
       .bind(Number(delivered),error,Math.min(3600,60*2**Math.min(lock.attempts,5)),order_id,lock.locked_until).run();
   }
 }
+
+export async function telegramSend(env, text) {
+  if (!telegramReady(env)) return false;
+  const r = await fetch('https://api.telegram.org/bot' + env.TELEGRAM_BOT_TOKEN + '/sendMessage', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000),
+    body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: String(text).slice(0, 3900), protect_content: true, link_preview_options: { is_disabled: true } }),
+  });
+  return r.ok;
+}

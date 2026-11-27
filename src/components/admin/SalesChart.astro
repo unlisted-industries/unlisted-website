@@ -1,0 +1,56 @@
+---
+// Shopify-style "Total sales over time": this period (solid) vs previous period (dashed).
+// Website orders (not cancelled) + imported Shopify orders (not cancelled, not linked duplicates). Cairo days.
+import { env } from 'cloudflare:workers';
+import { all } from '../../lib/db.js';
+import { money } from '../../lib/content.js';
+const days = [7, 30, 90].includes(Number(Astro.url.searchParams.get('chart'))) ? Number(Astro.url.searchParams.get('chart')) : 30;
+const day = 86400, cairo = 7200;
+const today = Math.floor((Date.now() / 1000 + cairo) / day);
+const start = today - days + 1, prevStart = start - days;
+const rows = await all(env.DB.prepare(`SELECT d, sum(amount) amount, count(*) orders FROM (
+    SELECT CAST((created_at + ?) / ? AS INTEGER) d, total amount FROM orders WHERE status <> 'cancelled' AND created_at >= ?
+    UNION ALL
+    SELECT CAST((created_at + ?) / ? AS INTEGER), CAST(round(CAST(amount AS NUMERIC) * 100) AS INTEGER) FROM shopify_orders
+      WHERE cancelled_at IS NULL AND created_at >= ? AND source_id NOT IN (SELECT shopify_source_id FROM finance_order_links)
+  ) GROUP BY d`).bind(cairo, day, prevStart * day - cairo, cairo, day, prevStart * day - cairo));
+const byDay = new Map(rows.map((r) => [r.d, r]));
+const series = (from) => Array.from({ length: days }, (_, i) => byDay.get(from + i)?.amount ?? 0);
+const current = series(start), previous = series(prevStart);
+const sum = (a) => a.reduce((n, v) => n + v, 0);
+const total = sum(current), prevTotal = sum(previous);
+const orders = Array.from({ length: days }, (_, i) => byDay.get(start + i)?.orders ?? 0).reduce((n, v) => n + v, 0);
+const change = prevTotal ? Math.round(100 * (total - prevTotal) / prevTotal) : null;
+const W = 720, H = 200, pad = 8, max = Math.max(1, ...current, ...previous);
+const pts = (a) => a.map((v, i) => `${(pad + i * (W - 2 * pad) / Math.max(1, days - 1)).toFixed(1)},${(H - pad - v / max * (H - 2 * pad)).toFixed(1)}`).join(' ');
+const label = (d) => new Date(d * day * 1000).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+---
+<section class="panel sales-chart" aria-labelledby="sales-chart-title">
+  <header class="performance-heading">
+    <div><p class="overline">TOTAL SALES</p><h2 id="sales-chart-title">{money(total, true)}
+      {change !== null && <span class:list={['sc-change', change >= 0 ? 'up' : 'down']}>{change >= 0 ? '↑' : '↓'} {Math.abs(change)}%</span>}</h2>
+      <p class="muted">{orders} orders · last {days} days</p></div>
+    <nav class="sc-range">{[7, 30, 90].map((d) => <a href={'?chart=' + d} class:list={[d === days && 'on']}>{d} days</a>)}</nav>
+  </header>
+  <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`Daily sales, last ${days} days`}>
+    {[0.25, 0.5, 0.75].map((f) => <line x1="0" x2={W} y1={H * f} y2={H * f} class="sc-grid" />)}
+    <polyline points={pts(previous)} class="sc-prev" />
+    <polyline points={pts(current)} class="sc-now" />
+  </svg>
+  <div class="sc-axis"><span>{label(start)}</span><span>{label(today)}</span></div>
+  <p class="sc-legend"><span class="sc-key now"></span>Last {days} days <span class="sc-key prev"></span>Previous {days} days</p>
+</section>
+<style>
+  .sales-chart { margin-bottom: 18px; }
+  .sales-chart h2 { display: flex; align-items: baseline; gap: 10px; font-size: 28px; font-variant-numeric: tabular-nums; }
+  .sc-change { font-size: 13px; font-weight: 600; } .sc-change.up { color: #1a7f37; } .sc-change.down { color: #c8102e; }
+  .sc-range { display: flex; gap: 6px; } .sc-range a { padding: 5px 10px; border: 1px solid #e3e6e3; border-radius: 8px; font-size: 13px; text-decoration: none; color: inherit; }
+  .sc-range a.on { background: #0b1830; color: #fff; border-color: #0b1830; }
+  .sales-chart svg { width: 100%; height: 200px; display: block; margin-top: 8px; }
+  .sc-grid { stroke: #eef0ee; stroke-width: 1; }
+  .sc-now { fill: none; stroke: #2563eb; stroke-width: 2.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+  .sc-prev { fill: none; stroke: #93b4f5; stroke-width: 1.5; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+  .sc-axis { display: flex; justify-content: space-between; font-size: 12px; color: #6b7280; }
+  .sc-legend { font-size: 12px; color: #6b7280; display: flex; align-items: center; gap: 6px; }
+  .sc-key { display: inline-block; width: 16px; height: 0; border-top: 2.5px solid #2563eb; margin-left: 8px; } .sc-key.prev { border-top: 1.5px dashed #93b4f5; }
+</style>

@@ -6,6 +6,7 @@ import { historicalOrder } from './order-history.js';
 import { StoreError,textValue,quantityValue,priceValue } from './http.js';
 import { allocate,portion,eligibility,reasons,rmaStates } from './rma-math.js';
 import { sendEmail } from './auth.js';
+import { telegramSend } from './order-notifications.js';
 const ready=new WeakSet();
 export async function ensureRma(db) {if(ready.has(db))return;await ensureFinance(db);await db.batch(splitFinanceSql(migration).map(s=>db.prepare(s)));ready.add(db);}
 const json=(s,f={})=>{try{return JSON.parse(s)??f}catch{return f}};
@@ -94,6 +95,7 @@ export async function submitRma(env,user,form) {
    ...eventStatements(db,id,user.email,'requested',q.verified?'Request received. / تم استلام الطلب.':'Request received for evidence review. / الطلب قيد مراجعة البيانات.',user.email,language)];
   await db.batch(commands);
  } catch(e) {for(const key of saved)await env.MEDIA.delete(key);if(/Return quantity already requested/.test(e.message))throw new StoreError('Some quantities already have a return request. Refresh the order.',409);throw e;}
+ await telegramSend(env,`UNLISTED · NEW RETURN REQUEST\n${order.reference} · ${({refund:'Refund',exchange:'Exchange',credit:'Store credit'})[q.kind]} · ${reasons[q.reason]?.[0]||q.reason}\n${order.name} · ${user.email}\n${q.lines.map(l=>l.quantity+' × '+l.title).join('\n')}\n\nhttps://unlisted-shop.com/admin/returns?request=${id}`).catch(()=>{});
  if(q.policy.auto_approve&&q.verified&&q.elig.code==='eligible'&&order.paid&&q.lines.every(l=>l.variant_id)) {
   const auto=new FormData();auto.set('id',id);auto.set('version','0');auto.set('operation','approve');auto.set('message',language==='ar'?q.policy.instructions_ar:q.policy.instructions_en);
   try {await manageRma(env,'automation',auto);}catch(e){if(!(e instanceof StoreError))throw e;}

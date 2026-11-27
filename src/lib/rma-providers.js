@@ -50,16 +50,25 @@ export async function bookRmaShipment(env,actor,form) {
  const payload=shipmentPayload(provider,c,direction,env,zone),op=await claim(db,c,'shipping:'+direction,provider);
  const path=provider==='bosta'?'https://app.bosta.co/api/v2/deliveries?apiVersion=1':'https://api.shipblu.com/api/v1/'+(direction==='return'?'returns/':'delivery-orders/');
  try {
-  const r=await fetch(path,{method:'POST',headers:{Authorization:provider==='bosta'?env.BOSTA_API_KEY:'Api-Key '+env.SHIPBLU_API_KEY,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)}),data=await r.json();
+  let r;
+  try {r=await fetch(path,{method:'POST',headers:{Authorization:provider==='bosta'?env.BOSTA_API_KEY:'Api-Key '+env.SHIPBLU_API_KEY,'Content-Type':'application/json'},body:JSON.stringify(payload),signal:AbortSignal.timeout(15000)});}catch{throw new Error('No answer from courier');}
+  const data=await r.json().catch(()=>({}));
+  // An explicit rejection (4xx or success:false) means nothing was created: release the claim so it can be fixed and retried.
+  if(r.status>=400&&r.status<500||provider==='bosta'&&data.success===false) {
+   const why=String(data?.message||data?.error?.message||data?.error||data?.detail||('HTTP '+r.status)).slice(0,300);
+   await db.prepare('DELETE FROM rma_operations WHERE id=?').bind(op).run();
+   await audit(db,c,actor,'shipping_rejected',provider+' · '+why);
+   throw new StoreError((provider==='bosta'?'Bosta':'ShipBlu')+' did not book it: '+why);
+  }
   const body=provider==='bosta'?data.data:data,providerId=body?._id||body?.id,tracking=body?.trackingNumber||body?.tracking_number;
   if(!r.ok||(provider==='bosta'&&data.success!==true)||!providerId)throw new Error('Unconfirmed shipment');
   await statements(db,[['INSERT INTO rma_shipments(case_id,direction,provider,provider_id,tracking,status) VALUES(?,?,?,?,?,?)',c.id,direction,provider,String(providerId),String(tracking||providerId),String(body.status||body.state?.value||'Created — pickup confirmation pending').slice(0,100)],['UPDATE rma_operations SET state=?,reference=?,detail=? WHERE id=?','succeeded',String(providerId),'Created at courier',op],...(direction==='replacement'?[['UPDATE rma_replacements SET state=? WHERE case_id=?','shipped',c.id]]:[])]);
   await audit(db,c,actor,'shipping_booked',provider+' · '+direction+' · '+(tracking||providerId));
- }catch {await uncertain(db,op);throw new StoreError('Courier outcome needs review. Check the courier dashboard; this booking will not be resent.',409);}
+ }catch(e) {if(e instanceof StoreError)throw e;await uncertain(db,op);throw new StoreError('No clear answer from the courier. Check the courier dashboard before trying again.',409);}
 }
 export async function recordRmaOperation(env,actor,form) {
  const db=env.DB;await ensureRma(db);const c=await caseDetail(db,textValue(form,'id',32));if(!c)throw new StoreError('Request not found.',404);
- const type=textValue(form,'operation',24),reference=textValue(form,'reference',180),note=textValue(form,'message',800,true);
+ const type=textValue(form,'operation',24),reference=textValue(form,'reference',180),note=textValue(form,'message',800,type!=='tracking');
  if(type==='difference') {
   if(c.state!=='received'||c.kind!=='exchange'||c.settlement===0||form.get('settlement_verified')!=='on')throw new StoreError('Confirm the exchange difference first.');
   await db.batch([db.prepare("INSERT INTO rma_ledger(id,case_id,kind,amount,reference) VALUES(?,?,'difference',?,?)").bind(makeToken(16),c.id,c.settlement,reference),db.prepare('INSERT INTO rma_events(id,case_id,actor,action,detail) VALUES(?,?,?,?,?)').bind(makeToken(16),c.id,actor,'difference',note+' · '+reference)]);return;

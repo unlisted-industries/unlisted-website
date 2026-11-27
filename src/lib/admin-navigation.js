@@ -13,7 +13,6 @@ export const websiteSections = [
     { key: 'inventory', label: 'Stock Management' },
   ] },
   { key: 'customers', label: 'Customers' },
-  { key: 'discounts', label: 'Discounts' },
   { key: 'content', label: 'Content', children: [{ key: 'media', label: 'Files' }] },
   { key: 'analytics', label: 'Analytics' },
   { key: 'online-store', label: 'Online Store' },
