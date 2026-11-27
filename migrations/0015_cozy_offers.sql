@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS cart_cozy_sets (
 CREATE VIEW IF NOT EXISTS cozy_offer_terms AS
 SELECT unixepoch('2026-11-27T00:00:00+02:00') AS starts_at,
        unixepoch('2026-11-29T00:00:00+02:00') AS ends_at,
-       44900 AS sale_price, 52122 AS hoodie_set_price, 47778 AS sweats_set_price;
+       44900 AS sale_price, 46852 AS hoodie_set_price, 42948 AS sweats_set_price;
 
 CREATE VIEW IF NOT EXISTS cart_offer_items AS
 WITH lines AS (
