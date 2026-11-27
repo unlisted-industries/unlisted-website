@@ -1206,7 +1206,7 @@ test('orders group connects with the cha-ching sound and receives order alerts w
   const sentNow = telegram.slice(before);
   assert.equal(sentNow[0].method, 'sendAudio');
   assert.equal(sentNow[0].chat_id, -100777);
-  assert.match(sentNow[0].audio, /\/theme\/cha-ching\.mp3$/);
+  assert.match(sentNow[0].audio, /\/theme\/cha-ching\.mp3\?v=2$/);
   const web = browser();
   await db.prepare("UPDATE variants SET inventory=5,price=60000 WHERE id='v'").run();
   const input = await customerCheckout(web, 'chaching@example.invalid', 'cod', '');
