@@ -5,7 +5,7 @@ export const saleStartsAt = Date.parse('2026-11-27T00:00:00+02:00');
 export const saleEndsAt = Date.parse('2026-11-29T00:00:00+02:00');
 export const salePrice = 44900;
 export const setRegularPrice = 115000;
-export const setPrice = 99900;
+export const setPrice = 89800;
 
 export function blackFridayActive(now = Date.now()) {
   return now >= saleStartsAt && now < saleEndsAt;

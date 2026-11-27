@@ -5,7 +5,7 @@ import Notice from '../components/Notice.astro';
 import ProductCard from '../components/ProductCard.astro';
 import CozySetVisual from '../components/CozySetVisual.astro';
 import { getProduct } from '../lib/catalog.js';
-import { blackFridayActive, hoodieHandle, sweatsHandle, salePrice, setPrice } from '../lib/offers.js';
+import { blackFridayActive, hoodieHandle, sweatsHandle, salePrice, setPrice, setRegularPrice } from '../lib/offers.js';
 import { money } from '../lib/content.js';
 const now = Date.now();
 const sale = blackFridayActive(now);
@@ -24,7 +24,7 @@ const sweatsSizes = sweats?.variants.filter(v=>v.inventory>0) ?? [];
         <h2>COZY FULL SET</h2>
         <p>Grey hoodie + grey straight leg sweatpants.</p>
         <p class="cozy-set-price">{money(setPrice,true)}</p>
-        {sale && <p class="cozy-set-note">Black Friday individual prices total {money(2*salePrice,true)}. <a href="#shop-separately">Shop separately</a>.</p>}
+        {sale && <p class="cozy-set-note">You save {money(setRegularPrice-setPrice,true)} on the full set. <a href="#shop-separately">Shop separately</a>.</p>}
         {hoodieSizes.length && sweatsSizes.length ? <form method="post" action="/api/cart" class="cozy-set-form">
           <label>Hoodie size<select name="hoodie" required><option value="">Select size</option>{hoodieSizes.map(size=><option value={size.id}>{size.title}</option>)}</select></label>
           <label>Sweatpants size<select name="sweats" required><option value="">Select size</option>{sweatsSizes.map(size=><option value={size.id}>{size.title}</option>)}</select></label>
