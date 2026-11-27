@@ -36,7 +36,6 @@ picker?.addEventListener('change', () => {
   price.replaceChildren();
   if (option.was) { const was = document.createElement('del'); was.className = 'unl-price-was'; was.textContent = option.was; price.append(was, ' '); }
   const now = document.createElement('span'); now.className = 'unl-price-now'; now.textContent = option.price; price.append(now);
-  if (option.save) { const save = document.createElement('span'); save.className = 'unl-price-save'; save.textContent = 'SAVE ' + option.save; price.append(save); }
 });
 
 if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
