@@ -6,6 +6,7 @@ import { collectionSales } from '../../lib/collection-sales.js';
 import { reportingRange } from '../../lib/reporting.js';
 import { liveVisitors } from '../../lib/live-visitors.js';
 import LiveVisitors from './LiveVisitors.astro';
+import SalesChart from './SalesChart.astro';
 import { workspaceSections } from '../../lib/admin-navigation.js';
 import { emailReady } from '../../lib/auth.js';
 import { getSettings } from '../../lib/catalog.js';
@@ -59,6 +60,7 @@ const poster = mediaUrl(settings.hero_poster);
     <div><p class="overline">YOUR STORE, AT A GLANCE</p><h1>{greeting}, UNLISTED.</h1><p>See what is happening, and how your store is growing.</p></div>
     <a class="button" href="/" target="_blank" rel="noopener">Open storefront ↗</a>
   </header>
+  <SalesChart />
   <section class="panel collection-sales" aria-labelledby="collection-sales-title">
     <header class="performance-heading"><div><p class="overline">ALL TIME</p><h2 id="collection-sales-title">Sales by collection</h2></div><a href="/admin/orders">View orders <Icon name="arrow" /></a></header>
     <div class="collection-grid">
