@@ -6,12 +6,14 @@ const boundary = active ? saleEndsAt : saleStartsAt;
 const time = Math.max(0, Math.ceil((boundary - now) / 1000));
 const clock = [Math.floor(time / 3600), Math.floor(time / 60) % 60, time % 60].map(value => String(value).padStart(2, '0'));
 ---
-{now < saleEndsAt && <aside class="offer-banner" data-offer-clock data-now={now} data-boundary={boundary} aria-label="Black Friday">
+{now < saleEndsAt && <aside class:list={['offer-banner', active && time < 21600 && 'is-urgent']} data-offer-clock data-now={now} data-boundary={boundary} aria-label="Black Friday">
   <a href="/offers">
-    <span class="offer-banner-countdown">
+    <span class="ob-head">
+      <span class="ob-live" aria-hidden="true"></span>
       <strong class="offer-banner-title">{lang === 'ar' ? (active ? 'عرض البلاك فرايداي ينتهي خلال' : 'عرض البلاك فرايداي يبدأ خلال') : (active ? 'BLACK FRIDAY SALE ENDS IN' : 'BLACK FRIDAY SALE STARTS IN')}</strong>
-      <time datetime={new Date(boundary).toISOString()} data-offer-time aria-label={active ? 'Offer ends November 29 at midnight Cairo time' : 'Offer starts November 27 at midnight Cairo time'}>{clock.map((digits, index) => <>{index > 0 && ':'}<span class="offer-banner-digits">{digits}</span></>)}</time>
     </span>
-    <span class="offer-banner-link">{lang === 'ar' ? 'العروض' : 'Shop offers'} <span aria-hidden="true">↗</span></span>
+    <time datetime={new Date(boundary).toISOString()} data-offer-time aria-label={active ? 'Offer ends November 29 at midnight Cairo time' : 'Offer starts November 27 at midnight Cairo time'}>{clock.map((digits, index) => <>{index > 0 && <span class="ob-colon">:</span>}<span class="ob-unit"><span class="offer-banner-digits">{digits}</span><small>{lang === 'ar' ? ['ساعة', 'دقيقة', 'ثانية'][index] : ['HRS', 'MIN', 'SEC'][index]}</small></span></>)}</time>
+    <span class="ob-cta">{lang === 'ar' ? 'تسوّق الآن' : 'SHOP NOW'} <span aria-hidden="true">→</span></span>
+    {active && <span class="ob-sub">{lang === 'ar' ? 'كمية محدودة · الأسعار ترجع لطبيعتها عند انتهاء العداد' : 'Limited stock · prices go back up when the timer hits zero'}</span>}
   </a>
 </aside>}

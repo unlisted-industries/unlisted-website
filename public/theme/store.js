@@ -74,6 +74,7 @@ if (offerClock) {
       return;
     }
     const values = [Math.floor(remaining / 3600), Math.floor(remaining / 60) % 60, remaining % 60];
+    if (remaining < 21600) offerClock.classList.add('is-urgent');
     digitGroups.forEach((group, index) => {
       group.textContent = String(values[index]).padStart(2, '0');
     });
