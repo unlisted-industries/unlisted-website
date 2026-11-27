@@ -30,11 +30,28 @@ export async function refundRma(env,actor,id) {
   await audit(db,c,actor,'refund_confirmed','Paymob refund confirmed: '+data.id);
  } catch {await uncertain(db,op);throw new StoreError('Paymob outcome requires review. Check Paymob before recording the result; this request will not be resent.',409);}
 }
+
+// Bosta needs its own city/district IDs. Look them up by name with the merchant's key before booking.
+const norm=v=>String(v||'').toLowerCase().normalize('NFKD').replace(/[\u064b-\u065f]/g,'').replace(/\b(el|al)[\s-]+/g,'').replace(/[^a-z0-9\u0600-\u06ff]+/g,'');
+const listOf=d=>Array.isArray(d?.data)?d.data:Array.isArray(d?.data?.list)?d.data.list:Array.isArray(d?.data?.cities)?d.data.cities:Array.isArray(d?.data?.districts)?d.data.districts:Array.isArray(d)?d:[];
+async function bostaGet(env,path){const r=await fetch('https://app.bosta.co/api/v2'+path,{headers:{Authorization:env.BOSTA_API_KEY},signal:AbortSignal.timeout(10000)});if(!r.ok)throw new StoreError('Bosta lookup failed (HTTP '+r.status+').');return r.json();}
+const names=x=>[x?.name,x?.nameAr,x?.districtName,x?.districtOtherName,x?.zoneName,x?.code,x?.alias].filter(Boolean).map(norm);
+export async function bostaAddress(env,o) {
+ const cityName=o.governorate||o.city,district=o.district||o.city;
+ const cities=listOf(await bostaGet(env,'/cities'));
+ const city=cities.find(c=>names(c).includes(norm(cityName)))||cities.find(c=>names(c).some(n=>n&&(n.includes(norm(cityName))||norm(cityName).includes(n))));
+ if(!city)throw new StoreError('Bosta does not recognise the city “'+cityName+'”. Book it in Bosta’s dashboard and add the tracking number.');
+ const cityId=city._id||city.id;
+ let districts=[];try{districts=listOf(await bostaGet(env,'/cities/'+encodeURIComponent(cityId)+'/districts'));}catch{}
+ const flat=districts.flatMap(d=>Array.isArray(d.districts)?d.districts.map(x=>({...x,zoneName:d.zoneName||d.name})):[d]);
+ const hit=flat.find(d=>names(d).includes(norm(district)))||flat.find(d=>names(d).some(n=>n&&n.length>3&&(n.includes(norm(district))||norm(district).includes(n))));
+ return hit?{city:city.name||cityName,cityId,districtId:hit.districtId||hit._id||hit.id}:{city:city.name||cityName,cityId,districtName:district};
+}
 export function shipmentPayload(provider,c,direction,env,zone='') {
  const o=c.order,returning=direction==='return';
  if(!o.address||!o.city||!o.phone||!o.name)throw new StoreError('Confirm the customer delivery address and phone first.');
  // Cash collection/refund is separate: never ask the courier to move money implicitly.
- if(provider==='bosta')return {type:returning?25:10,...(env.BOSTA_BUSINESS_LOCATION_ID?{businessLocationId:env.BOSTA_BUSINESS_LOCATION_ID}:{}),businessReference:'UNLISTED-'+c.id+'-'+direction,cod:0,specs:{packageType:'Parcel',size:'MEDIUM',packageDetails:{itemsCount:c.lines.reduce((n,l)=>n+l.quantity,0),description:'UNLISTED '+direction}},receiver:{firstName:o.name.split(' ')[0],lastName:o.name.split(' ').slice(1).join(' ')||o.name,phone:o.phone,email:c.email},[returning?'pickupAddress':'dropOffAddress']:{city:o.governorate||o.city,firstLine:o.address,...(zone?{districtId:zone}:{districtName:o.district||o.city})},notes:'UNLISTED '+c.id};
+ if(provider==='bosta')return {type:returning?25:10,...(env.BOSTA_BUSINESS_LOCATION_ID?{businessLocationId:env.BOSTA_BUSINESS_LOCATION_ID}:{}),businessReference:'UNLISTED-'+c.id+'-'+direction,cod:0,specs:{packageType:'Parcel',size:'MEDIUM',packageDetails:{itemsCount:c.lines.reduce((n,l)=>n+l.quantity,0),description:'UNLISTED '+direction}},receiver:{firstName:o.name.split(' ')[0],lastName:o.name.split(' ').slice(1).join(' ')||o.name,phone:o.phone,email:c.email},[returning?'pickupAddress':'dropOffAddress']:{firstLine:o.address,...(o.bosta||{city:o.governorate||o.city,districtName:o.district||o.city})},notes:'UNLISTED '+c.id};
  if(provider==='shipblu') {
   if(!/^\d+$/.test(zone)||!/^\d+$/.test(env.SHIPBLU_PACKAGE_SIZE||''))throw new StoreError('A verified ShipBlu zone ID and package size ID are required.');
   return {customer:{full_name:o.name,email:c.email,phone:o.phone,address:{line_1:o.address,zone:Number(zone)}},packages:[{package_size:Number(env.SHIPBLU_PACKAGE_SIZE)}],cash_amount:0,merchant_order_reference:'UNLISTED-'+c.id+'-'+direction,order_notes:'UNLISTED '+direction,declared_value:((returning?c.item_value:c.replacement_value)/100).toFixed(2)};
@@ -47,6 +64,7 @@ export async function bookRmaShipment(env,actor,form) {
  if(!c||!(direction==='return'&&c.state==='approved'||direction==='replacement'&&c.state==='received'&&c.kind==='exchange'))throw new StoreError('This shipping action is unavailable.');
  if(direction==='replacement'&&c.settlement!==0&&!await db.prepare("SELECT 1 FROM rma_ledger WHERE case_id=? AND kind='difference'").bind(c.id).first())throw new StoreError('Verify the price difference before dispatching the replacement.');
  if(!rmaConnections(env)[provider])throw new StoreError('Courier credentials and shipping activation are required. Use manual booking and record tracking.');
+ if(provider==='bosta'&&!zone)c.order={...c.order,bosta:await bostaAddress(env,c.order)};
  const payload=shipmentPayload(provider,c,direction,env,zone),op=await claim(db,c,'shipping:'+direction,provider);
  const path=provider==='bosta'?'https://app.bosta.co/api/v2/deliveries?apiVersion=1':'https://api.shipblu.com/api/v1/'+(direction==='return'?'returns/':'delivery-orders/');
  try {
