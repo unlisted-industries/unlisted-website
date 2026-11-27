@@ -8,6 +8,8 @@ import { rmaConnections } from '../../lib/rma-providers.js';
 import { telegramReady } from '../../lib/order-notifications.js';
 import { emailReady } from '../../lib/auth.js';
 import ReportingPeriod from './ReportingPeriod.astro';
+import { all } from '../../lib/db.js';
+import { prList, stockList } from '../../lib/stocks.js';
 const { section, title } = Astro.props;
 const finance = section === 'finance';
 const range = reportingRange(Astro.url);
@@ -21,6 +23,11 @@ const flows = auto ? [
   ['ShipBlu return pickups', auto.shipblu, 'Book return pickups with ShipBlu.', 'Add SHIPBLU_API_KEY and SHIPBLU_PACKAGE_SIZE in Cloudflare.'],
   ['Paymob card refunds', auto.paymob, 'Refund card payments from Returns & exchanges.', 'Set PAYMOB_RMA_REFUNDS_ENABLED to true in Cloudflare.'],
 ] : [];
+const marketing = section === 'marketing';
+const prRows = marketing ? await prList(env.DB) : [];
+const prStocks = marketing ? await stockList(env.DB) : [];
+const prVariants = marketing ? await all(env.DB.prepare(`SELECT v.id, p.title || ' · ' || v.title AS label FROM variants v JOIN products p ON p.id=v.product_id WHERE v.active=1 AND p.status='active' ORDER BY p.title, v.position`)) : [];
+const today = new Date(Date.now() + 7200000).toISOString().slice(0, 10);
 const compare = (key) => metrics?.previous ? { current: metrics[key], previous: metrics.previous[key] } : null;
 ---
 <div class="admin-heading">
@@ -50,6 +57,32 @@ const compare = (key) => metrics?.previous ? { current: metrics[key], previous: 
   <section class="panel"><h2>Promotions</h2><p>Create discount codes and review usage in Website.</p>
     <div class="admin-links"><a class="button primary" href="/admin/discounts">Manage discounts</a><a class="button" href="/admin/analytics">View store analytics</a></div>
   </section>
+  <section class="panel" id="pr"><h2>PR & UGC gifts</h2>
+    <p class="muted">{prRows.length} gifts · {prRows.reduce((n, r) => n + r.quantity, 0)} pieces · {money(prRows.reduce((n, r) => n + r.amount, 0), true)} paid</p>
+    <form method="post" action="/admin/stock-action" class="pr-form">
+      <input type="hidden" name="op" value="pr" />
+      <label>Creator <input name="creator" maxlength="100" required placeholder="@handle or name" /></label>
+      <label>Date <input name="gifted_on" type="date" value={today} max={today} required /></label>
+      <label>Collection <select name="project_id"><option value="">—</option>{prStocks.map((st) => <option value={st.id}>{st.name}</option>)}</select></label>
+      <label>Product <select name="variant_id" required><option value="">Choose</option>{prVariants.map((v) => <option value={v.id}>{v.label}</option>)}</select></label>
+      <label>Pieces <input name="quantity" type="number" min="1" max="100" value="1" required /></label>
+      <label>Paid? <select name="paid"><option value="no">No, free gift</option><option value="yes">Yes, paid</option></select></label>
+      <label>Amount paid (EGP) <input name="amount" type="number" min="0" step=".01" placeholder="0" /></label>
+      <label class="pr-check"><input type="checkbox" name="take_stock" checked /> Take from website stock</label>
+      <label class="pr-note">Note <input name="note" maxlength="300" placeholder="Optional" /></label>
+      <button class="button primary">Add gift</button>
+    </form>
+    {prRows.length > 0 && <div class="table-wrap"><table>
+      <thead><tr><th>Date</th><th>Creator</th><th>Product</th><th>Collection</th><th>Paid</th></tr></thead>
+      <tbody>{prRows.map((r) => <tr><td>{r.gifted_on}</td><td>{r.creator}{r.note && <><br /><small class="muted">{r.note}</small></>}</td><td>{r.quantity} × {r.product_title}</td><td>{r.stock ?? '—'}</td><td>{r.paid ? money(r.amount, true) : 'Free'}</td></tr>)}</tbody>
+    </table></div>}
+  </section>
+  <style>
+    .pr-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; align-items: end; margin-bottom: 16px; }
+    .pr-form label { display: grid; gap: 4px; font-size: 12px; }
+    .pr-form input, .pr-form select { padding: 8px; border: 1px solid #dfe3df; border-radius: 8px; font: inherit; }
+    .pr-form .pr-check { display: flex; gap: 6px; align-items: center; } .pr-form .pr-check input { width: auto; }
+  </style>
 </> : <>
   <section class="panel"><h2>Connections</h2><p class="muted">Live status. Checked each time this page loads.</p>
     <div class="table-wrap"><table><thead><tr><th>Automation</th><th>Status</th><th>What it does</th></tr></thead><tbody>

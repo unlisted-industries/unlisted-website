@@ -215,7 +215,7 @@ test('COD checkout prevents overselling and duplicate orders and restores stock 
   assert.equal(await db.prepare("SELECT uses FROM discounts WHERE code='COZY10'").first('uses'), 1);
   const adminOrder = await admin('/admin/orders?order=' + order);
   assert.match(await adminOrder.text(), /Test address/);
-  for (const section of ['', '/analytics?days=7', '/marketing']) {
+  for (const section of ['/analytics?days=7', '/marketing']) {
     assert.match(await (await admin('/admin' + section)).text(), /50\.0%/);
   }
   const cancel = { op: 'order', area: 'orders', id: order, operation: 'cancel' };
@@ -1214,4 +1214,23 @@ test('orders group connects with the cha-ching sound and receives order alerts w
   await web('/api/checkout', input);
   const alert = telegram.slice(mark).find((m) => /NEW ORDER/.test(m.text ?? ''));
   assert.equal(String(alert.chat_id), '-100777');
+});
+
+test('finance stock picker shows each stock with revenue and break-even; marketing records PR gifts', async () => {
+  admin = browser(); await admin('/admin/session', { action: 'password', password: ownerPassword });
+  const home = await (await admin('/admin')).text();
+  assert.doesNotMatch(home, /Sales by collection|Store connections|Paid revenue<\/dt>/);
+  assert.match(home, /sales-chart\.js/);
+  assert.match(home, /Live visitors/);
+  const page = await (await admin('/admin/finance')).text();
+  assert.match(page, /stock-wheel/);
+  assert.match(page, /Break-even ROAS/);
+  const project = await db.prepare('SELECT id FROM ops_projects LIMIT 1').first('id');
+  assert.match((await admin('/admin/stock-action', { op: 'stock_settings', project_id: project, price: '600', pieces: '50', ads: '1000' })).headers.get('Location'), /saved=1/);
+  assert.match(await (await admin('/admin/finance?stock=' + project)).text(), /50 total/);
+  await db.prepare("UPDATE variants SET inventory=3 WHERE id='v'").run();
+  const pr = await admin('/admin/stock-action', { op: 'pr', creator: '@fixture', gifted_on: '2026-11-20', project_id: project, variant_id: 'v', quantity: '1', paid: 'yes', amount: '250', take_stock: 'on' });
+  assert.match(pr.headers.get('Location'), /\/admin\/marketing\?saved=1/);
+  assert.equal(await db.prepare("SELECT inventory FROM variants WHERE id='v'").first('inventory'), 2);
+  assert.match(await (await admin('/admin/marketing')).text(), /@fixture[\s\S]*LE 250\.00|@fixture[\s\S]*250/);
 });

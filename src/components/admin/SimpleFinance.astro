@@ -5,7 +5,10 @@ import { ensureSimpleFinance,stockMetrics } from '../../lib/finance-simple.js';
 import { makeToken } from '../../lib/db.js';
 import { money } from '../../lib/content.js';
 import { telegramReady } from '../../lib/order-notifications.js';
+import StockPicker from './StockPicker.astro';
+import { stockList } from '../../lib/stocks.js';
 const {f}=Astro.props;
+const stocks=await stockList(env.DB);
 await ensureSimpleFinance(env.DB);
 const plans=(await env.DB.prepare('SELECT * FROM finance_stock_plans ORDER BY updated_at DESC').all()).results;
 const edit=plans.find(p=>p.id===Astro.url.searchParams.get('edit'));
@@ -19,11 +22,11 @@ const spend=f.campaigns.reduce((n,c)=>n+c.spend,0);
 const sent=await env.DB.prepare("SELECT max(sent_at) FROM finance_telegram_outbox WHERE state='sent'").first('max(sent_at)');
 ---
 <div class="finance-root simple-finance">
-<p><a class="fin-button secondary" href="/admin/operations">Stocks, businesses & CPA planner</a> <a href="/admin/inventory">Stock management</a></p>
-<header class="fin-header"><div><p class="fin-eyebrow">UNLISTED / FINANCE · EGP</p><h1>Know what your stock can make.</h1><p>Name your stock. Add its cost and price. See your numbers.</p></div><a class="fin-button" href="#add-stock">+ Add stock</a></header>
+{!stocks.length&&<p><a class="fin-button secondary" href="/admin/operations">Stocks, businesses & CPA planner</a> <a href="/admin/inventory">Stock management</a></p>}
+{stocks.length?<header class="fin-header"><div><p class="fin-eyebrow">UNLISTED / FINANCE · EGP</p><h1>Your stocks</h1><p>Pick a stock to see its sales, profit and break-even.</p></div></header>:<header class="fin-header"><div><p class="fin-eyebrow">UNLISTED / FINANCE · EGP</p><h1>Know what your stock can make.</h1><p>Name your stock. Add its cost and price. See your numbers.</p></div><a class="fin-button" href="#add-stock">+ Add stock</a></header>}
 {Astro.url.searchParams.get('error')&&<p class="fin-error" role="alert">{Astro.url.searchParams.get('error')}</p>}
 {Astro.url.searchParams.has('saved')&&<p class="fin-alert" role="status">Saved. Your numbers are up to date.</p>}
-{!plans.length&&<section class="fin-panel"><h2>Start with one stock</h2><p>A stock is a batch of clothes you bought or made. You only need four things below.</p></section>}
+{stocks.length?<StockPicker stocks={stocks} selected={Astro.url.searchParams.get('stock')}/>:<>{!plans.length&&<section class="fin-panel"><h2>Start with one stock</h2><p>A stock is a batch of clothes you bought or made. You only need four things below.</p></section>}
 {plans.map(p=>{const m=stockMetrics(p);const variants=f.variants.filter(v=>v.product_id===p.product_id);const verified=variants.length&&variants.every(v=>v.inventory!==null);return <section class="fin-panel stock-card">
 <div class="fin-panel-heading"><h2>{p.name}</h2><a href={'/admin/finance?edit='+p.id+'#add-stock'}>Edit stock</a></div>
 <p class="fin-muted">{p.quantity} pieces · Stock cost {money(p.total_cost)} · Selling for {money(p.price)} each</p>
@@ -53,7 +56,7 @@ const sent=await env.DB.prepare("SELECT max(sent_at) FROM finance_telegram_outbo
 </div></details>
 <label class="fin-check fin-full"><input type="checkbox" name="confirmed" value="yes" required/>These stock details are correct.</label>
 <button>{edit?'Save changes':'Save stock & show my numbers'}</button>{edit&&<a href="/admin/finance">Cancel edit</a>}
-</form></section>
+</form></section></>}
 <details class="fin-panel"><summary>My actual sales & ads</summary><p class="fin-muted">{f.range.current.startDate} to {f.range.current.endDate}. Stock estimates above are for the whole batch.</p>
 <dl><div><dt>Collected sales after recorded refunds</dt><dd>{money(f.collected)}</dd></div><div><dt>Meta ad spend</dt><dd>{spend?money(spend):'No spend synced'}</dd></div><div><dt>Cash available after known bills</dt><dd>{f.safeAdvertisingBudget===null?'Add bank balances and costs first':money(f.safeAdvertisingBudget)}</dd></div></dl>
 {f.campaigns.map(c=><article class="fin-alert"><strong>{c.name}</strong><p>Spend {money(c.spend)} · Meta CPA {c.cpa===null?'—':money(c.cpa)} · Meta ROAS {c.platformRoas?.toFixed(2)??'—'}×</p></article>)}
