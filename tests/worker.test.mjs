@@ -11,7 +11,7 @@ const origin = 'https://unlisted.test';
 const secret = 'local-test-hmac';
 const owner = 'owner@example.invalid';
 const ownerPassword = 'fixture-owner-password-one';
-const runtimeSchemas = new Set(['0015_cozy_offers.sql','0014_returns_workspace.sql','0006_owner_passwords.sql', '0007_order_returns.sql', '0008_shopify_import.sql', '0009_paymob_sandbox.sql', '0010_live_visitors.sql', '0013_independent_workspace.sql']);
+const runtimeSchemas = new Set(['0017_preorder_deposits.sql','0015_cozy_offers.sql','0014_returns_workspace.sql','0006_owner_passwords.sql', '0007_order_returns.sql', '0008_shopify_import.sql', '0009_paymob_sandbox.sql', '0010_live_visitors.sql', '0013_independent_workspace.sql']);
 const mail = [];
 const intents = [];
 const telegram = [];
@@ -80,7 +80,8 @@ before(async () => {
         return Response.json({ id: 'test-email-' + mail.length });
       }
       if (url.origin === 'https://api.telegram.org') {
-        telegram.push(await request.json());
+        if (url.pathname.endsWith('/getUpdates')) return Response.json({ok:true,result:[{update_id:1,my_chat_member:{chat:{id:-100777,type:'supergroup',title:'UNLISTED Orders'}}}]});
+        telegram.push({...await request.json(), method:url.pathname.split('/').at(-1)});
         return Response.json({ok:!failTelegram},{status:failTelegram ? 503 : 200});
       }
       if (url.href === 'https://accept.paymob.com/v1/intention/') {
@@ -360,7 +361,7 @@ test('storefront search, size chart and COZY matching item follow the supplied t
   const hoodie = await (await web('/products/cozy-hoodie-grey')).text();
   assert.match(hoodie, /MODEL: 172 CM · 67 KG · WEARS S\/M/);
   assert.match(hoodie, /Calculate my size/);
-  assert.match(hoodie, /data-small-medium="64" data-large="65"/);
+  assert.match(hoodie, /data-weight/);
   assert.match(hoodie, /Garment measurements \(cm\)/);
   const chartRows = [...hoodie.matchAll(/<th scope="row"[^>]*>([^<]+)<\/th><td[^>]*>(\d+)<\/td><td[^>]*>(\d+)<\/td>/g)];
   assert.deepEqual(chartRows.map(row => row.slice(1)), [
@@ -373,7 +374,7 @@ test('storefront search, size chart and COZY matching item follow the supplied t
   assert.doesNotMatch(product, /Garment measurements \(cm\)/);
   assert.match(product, /MODEL: 172 CM · 67 KG · WEARS S\/M/);
   assert.match(product, /Calculate my size/);
-  assert.match(product, /data-small-medium="35" data-large="37"/);
+  assert.match(product, /data-height[^>]*>[\s\S]*data-weight/);
   assert.doesNotMatch(product, /MODEL: 17[368] CM|id="SizeGuide"|Size chart coming soon/);
   assert.match(product, /COMPLETE THE LOOK/);
   assert.equal((await web('/api/cart', { action: 'add', variant: 's' })).headers.get('Location'), '/cart');
@@ -1155,4 +1156,62 @@ test('COZY offers apply at checkout, expire for stale quotes and reserve both se
        52122 AS hoodie_set_price, 47778 AS sweats_set_price`),
    ]);
  }
+});
+
+test('pre-order takes a 450 EGP Paymob deposit, lists it for the owner and alerts the orders chat', async () => {
+  await db.batch([
+    db.prepare("INSERT INTO products (id, handle, title, status, preorder) VALUES ('pp', 'fold-over-test', 'Fold-over test', 'active', 1)"),
+    db.prepare("INSERT INTO variants (id, product_id, title, price, inventory) VALUES ('pv', 'pp', 'L', 90000, NULL)"),
+    db.prepare('DELETE FROM rate_limits'),
+  ]);
+  const web = browser();
+  const page = await (await web('/?preorder=fold-over-test')).text();
+  assert.match(page, /PAY E?G?P?\s?450|PAY 450/);
+  assert.match(page, /Ships Sunday, 29 November/);
+  const sent = telegram.length, before = intents.length;
+  const started = await web('/api/preorder', { product: 'fold-over-test', variant: 'pv', name: 'Pre Buyer', email: 'pre@example.invalid',
+    phone: '01012345678', street: '14 Fouad Street', building: '7', apartment: '3', city: 'Nasr City', governorate: 'cairo', consent: 'on' });
+  assert.match(started.headers.get('Location'), /^https:\/\/accept\.paymob\.com\/unifiedcheckout\//);
+  assert.equal(intents.length, before + 1);
+  const intent = intents.at(-1);
+  assert.equal(intent.amount, 45000);
+  assert.deepEqual(intent.payment_methods, [101]);
+  const row = await db.prepare("SELECT * FROM preorder_deposits WHERE email='pre@example.invalid'").first();
+  assert.equal(row.balance, 90000 - 45000 + 8000);
+  assert.equal(row.address, '14 Fouad Street, Building 7, Apt 3');
+  assert.match(intent.notification_url, new RegExp('/api/paymob\\?deposit=' + row.id + '$'));
+  const transaction = { id: 777001, order: { id: Number(row.provider_order_id) }, amount_cents: 45000, currency: 'EGP', integration_id: 101,
+    success: true, pending: false, error_occured: false, is_voided: false, is_refunded: false, is_auth: false, is_capture: false,
+    is_standalone_payment: true, has_parent_transaction: false };
+  const send = (txn) => runtime.dispatchFetch(origin + '/api/paymob?deposit=' + row.id + '&hmac=' + createHmac('sha512', secret).update(paymobSignedValue(txn)).digest('hex'),
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'TRANSACTION', obj: txn }) });
+  assert.equal((await send({ ...transaction, amount_cents: 1000 })).status, 409);
+  assert.equal((await send(transaction)).status, 204);
+  assert.equal((await send(transaction)).status, 204);
+  assert.equal(await db.prepare('SELECT status FROM preorder_deposits WHERE id=?').bind(row.id).first('status'), 'paid');
+  assert.equal(telegram.length, sent + 1);
+  assert.match(telegram.at(-1).text, /NEW PRE-ORDER PO-\d+/);
+  assert.match(telegram.at(-1).text, /Collect on delivery: .*530/);
+  assert.ok(mail.some((m) => /pre-order PO-\d+ confirmed/.test(m.subject) && m.to[0] === 'pre@example.invalid'));
+  assert.match(await (await web('/preorder/' + row.id)).text(), /PRE-ORDER CONFIRMED/);
+  admin = browser(); await admin('/admin/session', { action: 'password', password: ownerPassword });
+  assert.match(await (await admin('/admin/inbox?kind=preorders')).text(), /Pre Buyer[\s\S]*14 Fouad Street/);
+});
+
+test('orders group connects with the cha-ching sound and receives order alerts while other alerts stay in the main chat', async () => {
+  admin = browser(); await admin('/admin/session', { action: 'password', password: ownerPassword });
+  const before = telegram.length;
+  const connected = await admin('/admin/finance-action', { op: 'orders_chat', tab: 'settings', confirmed: 'yes', request_id: 'a'.repeat(32) });
+  assert.match(connected.headers.get('Location'), /connected=UNLISTED%20Orders/);
+  const sentNow = telegram.slice(before);
+  assert.equal(sentNow[0].method, 'sendAudio');
+  assert.equal(sentNow[0].chat_id, -100777);
+  assert.match(sentNow[0].audio, /\/theme\/cha-ching\.mp3$/);
+  const web = browser();
+  await db.prepare("UPDATE variants SET inventory=5,price=60000 WHERE id='v'").run();
+  const input = await customerCheckout(web, 'chaching@example.invalid', 'cod', '');
+  const mark = telegram.length;
+  await web('/api/checkout', input);
+  const alert = telegram.slice(mark).find((m) => /NEW ORDER/.test(m.text ?? ''));
+  assert.equal(String(alert.chat_id), '-100777');
 });

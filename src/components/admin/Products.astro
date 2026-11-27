@@ -72,7 +72,7 @@ const label = isProduct ? 'Product' : 'Collection';
           <label>Status<select name="status">{['draft', 'active', 'archived'].map((status) => <option selected={record?.status === status}>{status}</option>)}</select></label>
           <label>Size chart<select name="size_chart_key"><option value="">No chart</option>{media.map((item) => <option value={item.key} selected={record?.size_chart_key === item.key}>{item.original_name}</option>)}</select></label>
           <label class="check"><input type="checkbox" name="featured" checked={Boolean(record?.featured)} /> Feature on home</label>
-          <label class="check"><input type="checkbox" name="preorder" checked={Boolean(record?.preorder)} /> Free pre-order registration</label>
+          <label class="check"><input type="checkbox" name="preorder" checked={Boolean(record?.preorder)} /> Pre-order (450 EGP deposit)</label>
         </>}
       </div>
       <RichText label="Description" name="description" value={record?.description} />

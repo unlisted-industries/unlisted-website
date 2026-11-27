@@ -1,25 +1,21 @@
 ---
 const { hoodie } = Astro.props;
-const dimensions = hoodie
-  ? [{ label: 'Chest width', sizes: [64, 65], kind: 'width' }, { label: 'Body length', sizes: [61, 63], kind: 'length' }]
-  : [{ label: 'Waist width (unstretched)', sizes: [35, 37], kind: 'waist' }, { label: 'Inseam', sizes: [67, 69], kind: 'length' }];
 ---
 
 <details class="cozy-size-finder">
   <summary>Calculate my size</summary>
-  <p>Lay a {hoodie ? 'hoodie' : 'pair of sweatpants'} that fits you well flat and measure it in centimeters. We compare it with our real garment measurements and leave room for washing.</p>
+  <p>Enter your height and weight and we'll suggest your size.</p>
   <form data-cozy-size-finder data-product={hoodie ? 'hoodie' : 'sweatpants'}>
-    {dimensions.map(({ label, sizes, kind }) => <label>
-      {label} (cm)
-      <input type="number" inputmode="decimal" min="1" step="0.1" max="300" required data-label={label.toLowerCase()} data-kind={kind} data-small-medium={sizes[0]} data-large={sizes[1]} />
-    </label>)}
-    <label class="cozy-height">Your height (cm) <small>optional</small>
-      <input type="number" inputmode="numeric" min="120" max="230" step="1" data-height />
+    <label>Height (cm)
+      <input type="number" inputmode="numeric" min="120" max="230" step="1" required data-height />
+    </label>
+    <label>Weight (kg)
+      <input type="number" inputmode="numeric" min="30" max="250" step="1" required data-weight />
     </label>
     <button type="submit" class="btn">CALCULATE</button>
     <output aria-live="polite"></output>
   </form>
-  <p class="cozy-size-note">Cotton fleece can shrink 1–2 cm after the first washes. If your measurements land exactly on a size, we recommend the next size up. Our model is 172 cm · 67 kg and wears S/M.</p>
+  <p class="cozy-size-note">Our model is 172 cm · 67 kg and wears S/M.</p>
 </details>
 
 <style>
@@ -39,8 +35,6 @@ const dimensions = hoodie
   button, output { grid-column: 1 / -1; }
   output { font-size: 14px; font-weight: 600; line-height: 1.5; }
   output small { display: block; font-weight: 400; color: #5a6478; margin-top: 4px; }
-  .cozy-height { grid-column: 1 / -1; }
-  .cozy-height small { color: #5a6478; font-weight: 400; }
   .cozy-size-note { font-size: 12px; color: #5a6478; }
   output:empty { display: none; }
 </style>
