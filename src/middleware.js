@@ -32,7 +32,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
     // Permit the exact Meta bootstrap in Store.astro and Meta's pixel endpoints.
     // Admin and API responses retain the original policy.
     const pixelPolicy = basePolicy
-      .replace("script-src 'self'", "script-src 'self' 'sha256-BGrr6sjeOj1e2ZfLeuJsLM/kDy1d/Xoh9/l0M1Ajatw=' https://connect.facebook.net")
+      .replace("script-src 'self'", "script-src 'self' 'sha256-G6uOwpDhgoTFOMFdBFngowNcVZ+dWt9eXGhlZN5lggo=' https://connect.facebook.net")
       .replace("img-src 'self' data:", "img-src 'self' data: https://www.facebook.com")
       + "; connect-src 'self' https://www.facebook.com https://connect.facebook.net";
     headers.set('Content-Security-Policy', /^\/(?:admin|api)(?:\/|$)/.test(url.pathname) ? basePolicy : pixelPolicy);

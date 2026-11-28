@@ -77,3 +77,25 @@ export async function checkCapi(env, code = 'TEST' + Math.floor(Math.random() * 
     return { ok: false, message: 'Meta refused the event: ' + String(data.error?.error_user_msg ?? data.error?.message ?? 'HTTP ' + r.status).slice(0, 200) };
   } catch { return { ok: false, message: 'Meta did not answer.' }; }
 }
+
+// Server copy of the browser PageView (same event ID, so Meta de-duplicates the pair).
+export async function sendPageView(env, context, { id, url }) {
+  if (!env.META_CAPI_TOKEN) return false;
+  const ua = context.request.headers.get('User-Agent') ?? '';
+  if (!ua || /bot|crawl|spider|preview|headless|lighthouse/i.test(ua)) return false;
+  const cookie = (name) => context.cookies.get(name)?.value || undefined;
+  let fbc = cookie('_fbc');
+  const clickId = url.searchParams.get('fbclid');
+  if (!fbc && clickId) fbc = 'fb.1.' + Date.now() + '.' + clickId.slice(0, 500);
+  try {
+    const response = await fetch('https://graph.facebook.com/v21.0/' + pixelId + '/events?access_token=' + encodeURIComponent(env.META_CAPI_TOKEN), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(8000),
+      body: JSON.stringify({ data: [{
+        event_name: 'PageView', event_time: Math.floor(Date.now() / 1000), event_id: id, action_source: 'website',
+        event_source_url: url.href.slice(0, 1000),
+        user_data: { client_ip_address: context.request.headers.get('CF-Connecting-IP') ?? undefined, client_user_agent: ua.slice(0, 400), fbp: cookie('_fbp'), fbc },
+      }] }),
+    });
+    return response.ok;
+  } catch { return false; }
+}
